@@ -21,22 +21,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   ]);
 
   const get = (r: PromiseSettledResult<any>) => r.status === 'fulfilled' ? r.value : null;
+
   const sumEvents = (data: any): number => {
     if (!data?.data?.series) return 0;
-    return Object.values(data.data.series).reduce((acc: number, v: any) =>
-      acc + Object.values(v as object).reduce((s: number, n: any) => s + (Number(n) || 0), 0), 0);
+    let total = 0;
+    for (const v of Object.values(data.data.series) as any[]) {
+      for (const n of Object.values(v as object)) {
+        total += Number(n) || 0;
+      }
+    }
+    return total;
   };
 
-  const mrr = get(mrrNow); const subs = get(subsNow);
-  const cheersThis = sumEvents(get(cheerNow)); const cheersLast = sumEvents(get(cheerPrev));
-  const runsThis = sumEvents(get(runNow)); const runsLast = sumEvents(get(runPrev));
+  const mrr = get(mrrNow);
+  const subs = get(subsNow);
+  const cheersThis = sumEvents(get(cheerNow));
+  const cheersLast = sumEvents(get(cheerPrev));
+  const runsThis = sumEvents(get(runNow));
+  const runsLast = sumEvents(get(runPrev));
   const pct = (a: number, b: number) => b === 0 ? null : Math.round(((a - b) / b) * 100);
 
   res.status(200).json({
     generatedAt: new Date().toISOString(),
-    weekLabel: thisWeekFrom + ' → ' + thisWeekTo,
+    weekLabel: thisWeekFrom + ' to ' + thisWeekTo,
     revenue: { mrr: mrr?.mrr ?? mrr?.data?.mrr ?? null, activeSubscribers: subs?.active ?? subs?.total ?? null },
-    engagement: { cheersThisWeek: cheersThis, cheersLastWeek: cheersLast, cheersDelta: pct(cheersThis, cheersLast), runsThisWeek: runsThis, runsLastWeek: runsLast, runsDelta: pct(runsThis, runsLast) },
-    text: 'REPORTE SEMANAL — CHEER MY RUN\nSemana: ' + thisWeekFrom + ' → ' + thisWeekTo + '\n\nMRR: $' + (mrr?.mrr ?? '—') + '\nCheers: ' + cheersThis + '\nCarreras: ' + runsThis
+    engagement: {
+      cheersThisWeek: cheersThis, cheersLastWeek: cheersLast, cheersDelta: pct(cheersThis, cheersLast),
+      runsThisWeek: runsThis, runsLastWeek: runsLast, runsDelta: pct(runsThis, runsLast)
+    },
+    text: 'WEEKLY REPORT - CHEER MY RUN\nWeek: ' + thisWeekFrom + ' to ' + thisWeekTo
   });
 }
