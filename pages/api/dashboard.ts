@@ -10,7 +10,8 @@ function authHeader() {
   return { Authorization: 'Basic ' + Buffer.from(MIXPANEL_SECRET + ':').toString('base64') };
 }
 
-// Query multiple events in one call, returns raw series data
+// Mixpanel events response shape:
+// { data: { series: string[], values: { "event_name": { "YYYY-MM-DD": number } } } }
 async function queryEvents(fromDate: string, toDate: string, eventNames: string[]) {
   const params = new URLSearchParams({
     event: JSON.stringify(eventNames),
@@ -23,12 +24,11 @@ async function queryEvents(fromDate: string, toDate: string, eventNames: string[
     const res = await fetch(`${BASE}/events/?${params}`, { headers: authHeader() });
     if (!res.ok) return null;
     return res.json();
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-// Query segmentation: event broken down by a user property
+// Mixpanel segmentation response shape:
+// { data: { series: string[], values: { "segment_value": { "YYYY-MM-DD": number } } } }
 async function querySeg(fromDate: string, toDate: string, event: string, property: string) {
   const params = new URLSearchParams({
     event,
@@ -42,36 +42,36 @@ async function querySeg(fromDate: string, toDate: string, event: string, propert
     const res = await fetch(`${BASE}/segmentation/?${params}`, { headers: authHeader() });
     if (!res.ok) return null;
     return res.json();
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-// Sum all values across all events in a batch response, for a specific event name
+// Sum total for one event name from a batch events response
+// data.data.values["event_name"]["date"] = count
 function sumEvent(data: any, eventName: string): number {
-  if (!data?.data?.series) return 0;
-  const series = data.data.series[eventName];
-  if (!series) return 0;
-  return Object.values(series as Record<string, number>).reduce((s, v) => s + (Number(v) || 0), 0);
+  const eventData = data?.data?.values?.[eventName];
+  if (!eventData) return 0;
+  return Object.values(eventData as Record<string, number>)
+    .reduce((s, v) => s + (Number(v) || 0), 0);
 }
 
-// Get daily series for one event from a batch response
+// Build daily series { "YYYY-MM-DD": count } for one event, only non-zero
 function dailySeries(data: any, eventName: string): Record<string, number> {
-  const series = data?.data?.series?.[eventName];
-  if (!series) return {};
-  // Only return dates with data
+  const eventData = data?.data?.values?.[eventName];
+  if (!eventData) return {};
   const result: Record<string, number> = {};
-  for (const [date, val] of Object.entries(series as Record<string, number>)) {
+  for (const [date, val] of Object.entries(eventData as Record<string, number>)) {
     if (Number(val) > 0) result[date] = Number(val);
   }
   return result;
 }
 
-// Collapse segmentation into { label: total }
+// Collapse segmentation values into { segment_label: total_count }
+// data.data.values["segment_value"]["date"] = count
 function collapseSeg(data: any): Record<string, number> {
-  if (!data?.data?.series) return {};
+  const values = data?.data?.values;
+  if (!values) return {};
   const result: Record<string, number> = {};
-  for (const [label, days] of Object.entries(data.data.series as Record<string, Record<string, number>>)) {
+  for (const [label, days] of Object.entries(values as Record<string, Record<string, number>>)) {
     if (!label || label === 'undefined' || label === 'null' || label === '(not set)') continue;
     const total = Object.values(days).reduce((s, v) => s + (Number(v) || 0), 0);
     if (total > 0) result[label] = total;
@@ -80,7 +80,6 @@ function collapseSeg(data: any): Record<string, number> {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Cache for 5 minutes
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
 
   const days = Math.min(Number(req.query.days) || 30, 90);
@@ -91,13 +90,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const prevTo = dateStr(subDays(today, days));
 
   try {
-    // BATCH 1: Core product events (Analytics V2 exact names)
+    // Batch 1: core product events — all in parallel
     const [
-      batch1,       // run_started, run_completed
-      batch2,       // cheer_received, cheer_favorited, cheer_replayed
-      batch3,       // app_opened, onboarding_started, onboarding_completed, paywall_presented, subscription_started
-      prevBatch1,   // previous period: run_started
-      prevBatch2,   // previous period: subscription_started, cheer_received
+      batch1,     // run_started, run_completed
+      batch2,     // cheer_received, cheer_favorited, cheer_replayed
+      batch3,     // app_opened, onboarding_started, onboarding_completed, paywall_presented, subscription_started
+      prevBatch1, // previous period: run_started
+      prevBatch2, // previous period: subscription_started, cheer_received
     ] = await Promise.all([
       queryEvents(from, to, ['run_started', 'run_completed']),
       queryEvents(from, to, ['cheer_received', 'cheer_favorited', 'cheer_replayed']),
@@ -106,10 +105,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       queryEvents(prevFrom, prevTo, ['subscription_started', 'cheer_received']),
     ]);
 
-    // BATCH 2: ICP segmentations — only if subscription_started has data
-    const totalSubs = sumEvent(batch3, 'subscription_started');
-
-    // Always query segmentations (they'll return empty if no data)
+    // Batch 2: ICP segmentations by onboarding properties — all in parallel
     const [
       segGender,
       segAgeGroup,
@@ -130,9 +126,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       querySeg(from, to, 'subscription_started', 'run_club_member'),
     ]);
 
-    // Core totals
+    // Totals from current period
     const totalRuns = sumEvent(batch1, 'run_started');
     const totalRunsCompleted = sumEvent(batch1, 'run_completed');
+    const totalSubs = sumEvent(batch3, 'subscription_started');
     const totalCheersReceived = sumEvent(batch2, 'cheer_received');
     const totalCheersFavorited = sumEvent(batch2, 'cheer_favorited');
     const totalCheersReplayed = sumEvent(batch2, 'cheer_replayed');
@@ -141,16 +138,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const totalOnboardingCompleted = sumEvent(batch3, 'onboarding_completed');
     const totalPaywall = sumEvent(batch3, 'paywall_presented');
 
-    // Previous period
+    // Previous period totals for deltas
     const prevRuns = sumEvent(prevBatch1, 'run_started');
     const prevSubs = sumEvent(prevBatch2, 'subscription_started');
     const prevCheers = sumEvent(prevBatch2, 'cheer_received');
 
-    // Delta helper
     const delta = (curr: number, prev: number) =>
       prev > 0 ? Math.round(((curr - prev) / prev) * 100) : null;
 
-    // Rate helpers
     const rate = (a: number, b: number) =>
       b > 0 ? Math.round((a / b) * 100) : null;
 
@@ -188,7 +183,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cheerReplayRate: rate(totalCheersReplayed, totalCheersReceived),
       },
 
-      // Daily series for charts (only non-zero dates)
       series: {
         runs: dailySeries(batch1, 'run_started'),
         runsCompleted: dailySeries(batch1, 'run_completed'),
@@ -197,7 +191,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         appOpens: dailySeries(batch3, 'app_opened'),
       },
 
-      // ICP — paying users segmented by onboarding properties
       icp: {
         byGender: collapseSeg(segGender),
         byAgeGroup: collapseSeg(segAgeGroup),
@@ -208,8 +201,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         byPlanType: collapseSeg(segPlanType),
         byRunClub: collapseSeg(segRunClub),
       },
+
+      // Debug: raw response snapshot for troubleshooting
+      _debug: {
+        batch1_has_data: !!batch1?.data?.values,
+        batch1_events: batch1?.data?.values ? Object.keys(batch1.data.values) : [],
+        batch3_events: batch3?.data?.values ? Object.keys(batch3.data.values) : [],
+      },
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message, stack: err.stack?.substring(0, 300) });
+    res.status(500).json({ error: err.message });
   }
 }
