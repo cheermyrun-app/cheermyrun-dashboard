@@ -19,10 +19,10 @@ const TABS = [
 ];
 
 const PERIODS = [
-  { value: 7, label: 'Últimos 7 días' },
-  { value: 30, label: 'Últimos 30 días' },
-  { value: 90, label: 'Últimos 90 días' },
-  { value: 180, label: 'Últimos 6 meses' },
+  { value: 7, label: 'Ãltimos 7 dÃ­as' },
+  { value: 30, label: 'Ãltimos 30 dÃ­as' },
+  { value: 90, label: 'Ãltimos 90 dÃ­as' },
+  { value: 180, label: 'Ãltimos 6 meses' },
 ];
 
 function MetricCard({ label, value, delta, deltaType }: any) {
@@ -62,7 +62,7 @@ function buildTimeSeriesFromMixpanel(data: any): { labels: string[]; values: num
   if (!data?.data?.series) return { labels: [], values: [] };
   const series = data.data.series;
   const allKeys = Object.keys(series).flatMap(k => Object.keys(series[k]));
-  const uniqueDates = [...new Set(allKeys)].sort();
+  const uniqueDates = Array.from(new Set(allKeys)).sort();
   const values = uniqueDates.map(date =>
     Object.values(series).reduce((sum: number, eventData: any) => sum + (eventData[date] || 0), 0)
   );
@@ -127,7 +127,7 @@ export default function Dashboard() {
   return (
     <>
       <Head>
-        <title>Cheer My Run — Investor Dashboard</title>
+        <title>Cheer My Run â Investor Dashboard</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet" />
@@ -162,7 +162,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div style={{ padding: '0 12px', marginBottom: 8 }}>
-            <div style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '0 8px', marginBottom: 4 }}>Navegación</div>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '0 8px', marginBottom: 4 }}>NavegaciÃ³n</div>
             {TABS.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 8px', borderRadius: 8, fontSize: 13, border: 'none', background: tab === t.id ? 'var(--surface)' : 'transparent', color: tab === t.id ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: tab === t.id ? 500 : 400, marginBottom: 1, cursor: 'pointer' }}>
                 {t.label}
@@ -192,7 +192,7 @@ export default function Dashboard() {
                 {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
               </select>
               <button onClick={generateReport} style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, border: '0.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-primary)', fontWeight: 500, cursor: 'pointer' }}>
-                Generar reporte ↗
+                Generar reporte â
               </button>
             </div>
           </div>
@@ -200,16 +200,16 @@ export default function Dashboard() {
           <div style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
             {tab === 'overview' && (
               <>
-                <div className="section-title">Métricas clave</div>
+                <div className="section-title">MÃ©tricas clave</div>
                 <div className="metrics-grid">
-                  <MetricCard label="MRR" value={mrrFmt} delta={data?.revenue?.mrr ? '↑ datos reales' : '↑ 12% (demo)'} deltaType="up" />
+                  <MetricCard label="MRR" value={mrrFmt} delta={data?.revenue?.mrr ? 'â datos reales' : 'â 12% (demo)'} deltaType="up" />
                   <MetricCard label="Suscriptores" value={subs.toLocaleString()} delta="activos" deltaType="up" />
-                  <MetricCard label="Cheers enviados" value={hasCheerData ? cheerSeries.values.reduce((a,b)=>a+b,0).toLocaleString() : '18,412'} delta="↑ 8%" deltaType="up" />
-                  <MetricCard label="Churn mensual" value={`${DEMO.churn}%`} delta="↑ 0.3pp" deltaType="down" />
-                  <MetricCard label="Descargas (mes)" value={DEMO.downloads.toLocaleString()} delta="↑ 21%" deltaType="up" />
-                  <MetricCard label="Conversión free→paid" value="18.6%" delta="↑ 2.1pp" deltaType="up" />
+                  <MetricCard label="Cheers enviados" value={hasCheerData ? cheerSeries.values.reduce((a,b)=>a+b,0).toLocaleString() : '18,412'} delta="â 8%" deltaType="up" />
+                  <MetricCard label="Churn mensual" value={`${DEMO.churn}%`} delta="â 0.3pp" deltaType="down" />
+                  <MetricCard label="Descargas (mes)" value={DEMO.downloads.toLocaleString()} delta="â 21%" deltaType="up" />
+                  <MetricCard label="ConversiÃ³n freeâpaid" value="18.6%" delta="â 2.1pp" deltaType="up" />
                   <MetricCard label="LTV estimado" value={`$${DEMO.ltv}`} delta="Estable" deltaType="neutral" />
-                  <MetricCard label="ARR proyectado" value={`$${arr ? Number(arr).toLocaleString() : DEMO.arr.toLocaleString()}`} delta="↑ con MRR" deltaType="up" />
+                  <MetricCard label="ARR proyectado" value={`$${arr ? Number(arr).toLocaleString() : DEMO.arr.toLocaleString()}`} delta="â con MRR" deltaType="up" />
                 </div>
                 <div className="charts-row">
                   <div className="chart-card">
@@ -225,13 +225,13 @@ export default function Dashboard() {
                 </div>
                 <div className="charts-row">
                   <div className="chart-card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ fontSize: 13, fontWeight: 500 }}>Distribución de planes</span><span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, border: '0.5px solid var(--border)', color: 'var(--text-secondary)' }}>Superwall</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ fontSize: 13, fontWeight: 500 }}>DistribuciÃ³n de planes</span><span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, border: '0.5px solid var(--border)', color: 'var(--text-secondary)' }}>Superwall</span></div>
                     <PlanBar label="Anual" pct={62} color="#1a1a1a" />
                     <PlanBar label="Mensual" pct={27} color="#888" />
                     <PlanBar label="Semanal" pct={11} color="#ccc" />
                     <div style={{ marginTop: 16, paddingTop: 12, borderTop: '0.5px solid var(--border)' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>Próximo cambio</div>
-                      <div style={{ fontSize: 12 }}>Por evento / carrera • Anual</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>PrÃ³ximo cambio</div>
+                      <div style={{ fontSize: 12 }}>Por evento / carrera â¢ Anual</div>
                     </div>
                   </div>
                   <div className="chart-card">
@@ -245,15 +245,15 @@ export default function Dashboard() {
             )}
             {tab === 'revenue' && (
               <>
-                <div className="section-title">Revenue — Superwall</div>
+                <div className="section-title">Revenue â Superwall</div>
                 <div className="metrics-grid">
-                  <MetricCard label="MRR" value={mrrFmt} delta="↑ 12%" deltaType="up" />
-                  <MetricCard label="ARR proyectado" value={`$${arr ? Number(arr).toLocaleString() : '38,880'}`} delta="↑ 12%" deltaType="up" />
-                  <MetricCard label="ARPU" value="$7.86" delta="↑ $0.42" deltaType="up" />
+                  <MetricCard label="MRR" value={mrrFmt} delta="â 12%" deltaType="up" />
+                  <MetricCard label="ARR proyectado" value={`$${arr ? Number(arr).toLocaleString() : '38,880'}`} delta="â 12%" deltaType="up" />
+                  <MetricCard label="ARPU" value="$7.86" delta="â $0.42" deltaType="up" />
                   <MetricCard label="LTV estimado" value={`$${DEMO.ltv}`} delta="Estable" deltaType="neutral" />
                 </div>
                 <div className="chart-card" style={{ marginBottom: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ fontSize: 13, fontWeight: 500 }}>MRR — 6 meses</span><span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, border: '0.5px solid var(--border)', color: 'var(--text-secondary)' }}>Superwall</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ fontSize: 13, fontWeight: 500 }}>MRR â 6 meses</span><span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, border: '0.5px solid var(--border)', color: 'var(--text-secondary)' }}>Superwall</span></div>
                   <div style={{ position: 'relative', height: 220 }}><Bar data={{ labels: DEMO.months, datasets: [{ data: DEMO.mrrHistory, backgroundColor: '#1a1a1a', borderRadius: 4 }] }} options={chartOpts()} /></div>
                 </div>
                 <div className="charts-row">
@@ -270,35 +270,35 @@ export default function Dashboard() {
             )}
             {tab === 'users' && (
               <>
-                <div className="section-title">Usuarios — Mixpanel</div>
+                <div className="section-title">Usuarios â Mixpanel</div>
                 <div className="metrics-grid">
-                  <MetricCard label="DAU (promedio)" value="284" delta="↑ 9%" deltaType="up" />
-                  <MetricCard label="MAU" value="2,140" delta="↑ 15%" deltaType="up" />
-                  <MetricCard label="Retención D7" value="41%" delta="↑ 3pp" deltaType="up" />
-                  <MetricCard label="Retención D30" value="22%" delta="Estable" deltaType="neutral" />
+                  <MetricCard label="DAU (promedio)" value="284" delta="â 9%" deltaType="up" />
+                  <MetricCard label="MAU" value="2,140" delta="â 15%" deltaType="up" />
+                  <MetricCard label="RetenciÃ³n D7" value="41%" delta="â 3pp" deltaType="up" />
+                  <MetricCard label="RetenciÃ³n D30" value="22%" delta="Estable" deltaType="neutral" />
                 </div>
                 <div className="chart-card" style={{ marginBottom: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}><span style={{ fontSize: 13, fontWeight: 500 }}>Descargas mensuales</span><span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 20, border: '0.5px solid var(--border)', color: 'var(--text-secondary)' }}>AppsFlyer / Mixpanel</span></div>
                   <div style={{ position: 'relative', height: 200 }}><Bar data={{ labels: DEMO.months, datasets: [{ label: 'Descargas', data: [620,710,840,1020,1280,1520,1842], backgroundColor: '#1a1a1a', borderRadius: 3 }, { label: 'Activados', data: [380,440,510,640,810,960,1180], backgroundColor: '#aaa', borderRadius: 3 }] }} options={chartOpts({ plugins: { legend: { display: true, labels: { font: { size: 11 }, boxWidth: 10 } } } })} /></div>
                 </div>
                 <div className="chart-card">
-                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 14 }}>Retención por cohorte</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 14 }}>RetenciÃ³n por cohorte</div>
                   <table className="eng-table"><thead><tr><th>Cohorte</th><th>S0</th><th>S1</th><th>S2</th><th>S4</th><th>S8</th></tr></thead><tbody>
                     <tr><td>Ene 2025</td><td>100%</td><td>58%</td><td>44%</td><td>32%</td><td>21%</td></tr>
                     <tr><td>Feb 2025</td><td>100%</td><td>61%</td><td>47%</td><td>35%</td><td>23%</td></tr>
-                    <tr><td>Mar 2025</td><td>100%</td><td>63%</td><td>49%</td><td>37%</td><td>—</td></tr>
+                    <tr><td>Mar 2025</td><td>100%</td><td>63%</td><td>49%</td><td>37%</td><td>â</td></tr>
                   </tbody></table>
                 </div>
               </>
             )}
             {tab === 'engagement' && (
               <>
-                <div className="section-title">Engagement — Mixpanel</div>
+                <div className="section-title">Engagement â Mixpanel</div>
                 <div className="metrics-grid">
-                  <MetricCard label="Cheers este período" value={hasCheerData ? cheerSeries.values.reduce((a,b)=>a+b,0).toLocaleString() : '18,412'} delta="↑ 8%" deltaType="up" />
-                  <MetricCard label="Cheers/carrera" value="4.8" delta="↑ 0.3" deltaType="up" />
-                  <MetricCard label="Carreras completadas" value={runSeries.labels.length > 0 ? runSeries.values.reduce((a,b)=>a+b,0).toLocaleString() : '3,834'} delta="↑ 11%" deltaType="up" />
-                  <MetricCard label="Links compartidos" value="5,210" delta="↑ 18%" deltaType="up" />
+                  <MetricCard label="Cheers este perÃ­odo" value={hasCheerData ? cheerSeries.values.reduce((a,b)=>a+b,0).toLocaleString() : '18,412'} delta="â 8%" deltaType="up" />
+                  <MetricCard label="Cheers/carrera" value="4.8" delta="â 0.3" deltaType="up" />
+                  <MetricCard label="Carreras completadas" value={runSeries.labels.length > 0 ? runSeries.values.reduce((a,b)=>a+b,0).toLocaleString() : '3,834'} delta="â 11%" deltaType="up" />
+                  <MetricCard label="Links compartidos" value="5,210" delta="â 18%" deltaType="up" />
                 </div>
                 <div className="charts-row">
                   <div className="chart-card">
@@ -318,17 +318,17 @@ export default function Dashboard() {
             )}
             {tab === 'ads' && (
               <>
-                <div style={{ background: 'rgba(245,158,11,0.1)', border: '0.5px solid rgba(245,158,11,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#b45309' }}>AppsFlyer pausado — datos históricos. Para reactivar añade APPSFLYER_API_TOKEN en Vercel.</div>
-                <div className="section-title">Ads / Marketing — AppsFlyer</div>
+                <div style={{ background: 'rgba(245,158,11,0.1)', border: '0.5px solid rgba(245,158,11,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#b45309' }}>AppsFlyer pausado â datos histÃ³ricos. Para reactivar aÃ±ade APPSFLYER_API_TOKEN en Vercel.</div>
+                <div className="section-title">Ads / Marketing â AppsFlyer</div>
                 <div className="metrics-grid">
                   <MetricCard label="Gasto total" value="$1,420" delta="Pausado" deltaType="neutral" />
-                  <MetricCard label="Instalaciones" value="318" delta="Histórico" deltaType="neutral" />
-                  <MetricCard label="CPI promedio" value="$4.47" delta="Histórico" deltaType="neutral" />
-                  <MetricCard label="ROAS estimado" value="2.1x" delta="↓ mejorable" deltaType="down" />
+                  <MetricCard label="Instalaciones" value="318" delta="HistÃ³rico" deltaType="neutral" />
+                  <MetricCard label="CPI promedio" value="$4.47" delta="HistÃ³rico" deltaType="neutral" />
+                  <MetricCard label="ROAS estimado" value="2.1x" delta="â mejorable" deltaType="down" />
                 </div>
                 <div className="chart-card">
-                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 14 }}>Canales de adquisición</div>
-                  <PlanBar label="Orgánico" pct={55} color="#1a1a1a" />
+                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 14 }}>Canales de adquisiciÃ³n</div>
+                  <PlanBar label="OrgÃ¡nico" pct={55} color="#1a1a1a" />
                   <PlanBar label="Instagram" pct={22} color="#555" />
                   <PlanBar label="TikTok" pct={13} color="#888" />
                   <PlanBar label="Referral" pct={10} color="#bbb" />
@@ -337,7 +337,7 @@ export default function Dashboard() {
             )}
             {tab === 'icp' && (
               <>
-                <div className="section-title">ICP y audiencia — Mixpanel</div>
+                <div className="section-title">ICP y audiencia â Mixpanel</div>
                 <div className="charts-row">
                   <div className="chart-card">
                     <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 14 }}>Edad del corredor</div>
@@ -345,7 +345,7 @@ export default function Dashboard() {
                   </div>
                   <div className="chart-card">
                     <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 14 }}>Tipo de carrera</div>
-                    <PlanBar label="Maratón" pct={34} color="#1a1a1a" />
+                    <PlanBar label="MaratÃ³n" pct={34} color="#1a1a1a" />
                     <PlanBar label="Media" pct={28} color="#444" />
                     <PlanBar label="10K" pct={22} color="#777" />
                     <PlanBar label="Otro" pct={16} color="#bbb" />
@@ -353,8 +353,8 @@ export default function Dashboard() {
                 </div>
                 <div className="chart-card">
                   <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 14 }}>Segmentos ICP</div>
-                  <table className="eng-table"><thead><tr><th>Segmento</th><th>% usuarios</th><th>Cheers/sesión</th><th>Conversión</th><th>LTV</th></tr></thead><tbody>
-                    <tr><td><strong>Corredor maratón 28-45</strong></td><td>38%</td><td>6.2</td><td>24%</td><td>$62</td></tr>
+                  <table className="eng-table"><thead><tr><th>Segmento</th><th>% usuarios</th><th>Cheers/sesiÃ³n</th><th>ConversiÃ³n</th><th>LTV</th></tr></thead><tbody>
+                    <tr><td><strong>Corredor maratÃ³n 28-45</strong></td><td>38%</td><td>6.2</td><td>24%</td><td>$62</td></tr>
                     <tr><td>Corredor casual 18-28</td><td>31%</td><td>3.8</td><td>11%</td><td>$28</td></tr>
                     <tr><td>Evento especial</td><td>20%</td><td>7.1</td><td>31%</td><td>$71</td></tr>
                     <tr><td>Otros</td><td>11%</td><td>2.1</td><td>6%</td><td>$18</td></tr>
@@ -377,8 +377,8 @@ export default function Dashboard() {
               <>
                 {[
                   { title: 'Revenue (Superwall)', rows: [{ k: 'MRR', v: report?.revenue?.mrr ? `$${Number(report.revenue.mrr).toLocaleString()}` : mrrFmt }, { k: 'Suscriptores activos', v: report?.revenue?.activeSubscribers ?? subs }] },
-                  { title: 'Engagement (Mixpanel)', rows: [{ k: 'Cheers esta semana', v: report?.engagement?.cheersThisWeek?.toLocaleString() ?? '—', delta: report?.engagement?.cheersDelta }, { k: 'Carreras iniciadas', v: report?.engagement?.runsThisWeek?.toLocaleString() ?? '—', delta: report?.engagement?.runsDelta }] },
-                  { title: 'Marketing (AppsFlyer)', rows: [{ k: 'Estado', v: 'Pausado', warn: true }, { k: 'Adquisición orgánica', v: '55% del total' }] },
+                  { title: 'Engagement (Mixpanel)', rows: [{ k: 'Cheers esta semana', v: report?.engagement?.cheersThisWeek?.toLocaleString() ?? 'â', delta: report?.engagement?.cheersDelta }, { k: 'Carreras iniciadas', v: report?.engagement?.runsThisWeek?.toLocaleString() ?? 'â', delta: report?.engagement?.runsDelta }] },
+                  { title: 'Marketing (AppsFlyer)', rows: [{ k: 'Estado', v: 'Pausado', warn: true }, { k: 'AdquisiciÃ³n orgÃ¡nica', v: '55% del total' }] },
                 ].map(section => (
                   <div key={section.title} style={{ border: '0.5px solid var(--border)', borderRadius: 8, padding: '14px 16px', marginBottom: 10 }}>
                     <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10 }}>{section.title}</div>
@@ -386,7 +386,7 @@ export default function Dashboard() {
                       <div key={row.k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
                         <span style={{ color: 'var(--text-secondary)' }}>{row.k}</span>
                         <span style={{ fontWeight: 500, color: row.warn ? '#f59e0b' : 'var(--text-primary)' }}>
-                          {row.v}{row.delta != null && <span style={{ fontSize: 11, color: row.delta >= 0 ? '#16a34a' : '#dc2626', marginLeft: 4 }}>{row.delta >= 0 ? `↑${row.delta}%` : `↓${Math.abs(row.delta)}%`}</span>}
+                          {row.v}{row.delta != null && <span style={{ fontSize: 11, color: row.delta >= 0 ? '#16a34a' : '#dc2626', marginLeft: 4 }}>{row.delta >= 0 ? `â${row.delta}%` : `â${Math.abs(row.delta)}%`}</span>}
                         </span>
                       </div>
                     ))}
@@ -396,7 +396,7 @@ export default function Dashboard() {
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowReport(false)} style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, border: '0.5px solid var(--border)', background: 'var(--card)', color: 'var(--text-primary)', cursor: 'pointer' }}>Cerrar</button>
-              <button onClick={copyReport} style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, background: '#1a1a1a', color: '#fff', border: 'none', fontWeight: 500, cursor: 'pointer' }}>{copied ? 'Copiado ✓' : 'Copiar reporte'}</button>
+              <button onClick={copyReport} style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, background: '#1a1a1a', color: '#fff', border: 'none', fontWeight: 500, cursor: 'pointer' }}>{copied ? 'Copiado â' : 'Copiar reporte'}</button>
             </div>
           </div>
         </div>
