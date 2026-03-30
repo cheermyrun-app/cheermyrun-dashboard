@@ -1,16 +1,33 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { format, subDays } from 'date-fns';
 
-const MIXPANEL_SECRET = process.env.MIXPANEL_SECRET ?? '';
+// Service Account credentials
+const MIXPANEL_USERNAME = process.env.MIXPANEL_USERNAME ?? '';
+const MIXPANEL_SECRET   = process.env.MIXPANEL_SECRET ?? '';
 const BASE = 'https://data.mixpanel.com/api/2.0';
 
 function dateStr(d: Date) { return format(d, 'yyyy-MM-dd'); }
-function auth() { return 'Basic ' + Buffer.from(MIXPANEL_SECRET + ':').toString('base64'); }
+
+// Service Account uses Basic Auth with username:secret
+function auth() {
+  const creds = MIXPANEL_USERNAME
+    ? `${MIXPANEL_USERNAME}:${MIXPANEL_SECRET}`
+    : `${MIXPANEL_SECRET}:`;
+  return 'Basic ' + Buffer.from(creds).toString('base64');
+}
 
 async function mpEvents(from: string, to: string, events: string[]) {
-  const params = new URLSearchParams({ event: JSON.stringify(events), from_date: from, to_date: to, unit: 'day', type: 'general' });
+  const params = new URLSearchParams({
+    event: JSON.stringify(events),
+    from_date: from,
+    to_date: to,
+    unit: 'day',
+    type: 'general',
+  });
   try {
-    const r = await fetch(`${BASE}/events/?${params}`, { headers: { Authorization: auth(), Accept: 'application/json' } });
+    const r = await fetch(`${BASE}/events/?${params}`, {
+      headers: { Authorization: auth(), Accept: 'application/json' },
+    });
     const text = await r.text();
     if (!r.ok) return { error: r.status, body: text.substring(0, 300) };
     return JSON.parse(text);
@@ -18,9 +35,18 @@ async function mpEvents(from: string, to: string, events: string[]) {
 }
 
 async function mpSeg(from: string, to: string, event: string, prop: string) {
-  const params = new URLSearchParams({ event, from_date: from, to_date: to, on: `properties["${prop}"]`, unit: 'day', type: 'general' });
+  const params = new URLSearchParams({
+    event,
+    from_date: from,
+    to_date: to,
+    on: `properties["${prop}"]`,
+    unit: 'day',
+    type: 'general',
+  });
   try {
-    const r = await fetch(`${BASE}/segmentation/?${params}`, { headers: { Authorization: auth() } });
+    const r = await fetch(`${BASE}/segmentation/?${params}`, {
+      headers: { Authorization: auth() },
+    });
     if (!r.ok) return null;
     return r.json();
   } catch { return null; }
@@ -36,7 +62,9 @@ function daily(data: any, event: string): Record<string, number> {
   const v = data?.data?.values?.[event];
   if (!v) return {};
   const r: Record<string, number> = {};
-  for (const [d, n] of Object.entries(v as Record<string, number>)) { if (Number(n) > 0) r[d] = Number(n); }
+  for (const [d, n] of Object.entries(v as Record<string, number>)) {
+    if (Number(n) > 0) r[d] = Number(n);
+  }
   return r;
 }
 
