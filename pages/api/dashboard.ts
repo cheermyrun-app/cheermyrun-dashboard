@@ -1,54 +1,54 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { format, subDays } from 'date-fns';
 
-const MIXPANEL_USERNAME = process.env.MIXPANEL_USERNAME ?? '';
-const MIXPANEL_SECRET   = process.env.MIXPANEL_SECRET ?? '';
-// Project ID is in the Mixpanel URL: mixpanel.com/project/3993852
-const PROJECT_ID = '3993852';
+// Mixpanel Data Export API - uses API Secret with Basic Auth: base64(secret:)
+// The API Secret for CheerMyRun Prod (3993852) is stored in MIXPANEL_SECRET
+const MIXPANEL_SECRET = process.env.MIXPANEL_SECRET ?? '';
 const BASE = 'https://data.mixpanel.com/api/2.0';
 
 function dateStr(d: Date) { return format(d, 'yyyy-MM-dd'); }
 
+// Basic auth: base64(secret + ":") — empty password, secret as username
 function auth() {
-  return 'Basic ' + Buffer.from(`${MIXPANEL_USERNAME}:${MIXPANEL_SECRET}`).toString('base64');
+  return 'Basic ' + Buffer.from(MIXPANEL_SECRET + ':').toString('base64');
+}
+
+async function mpGet(endpoint: string, params: URLSearchParams) {
+  const url = `${BASE}/${endpoint}?${params}`;
+  try {
+    const r = await fetch(url, {
+      headers: { 
+        'Authorization': auth(),
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    });
+    const text = await r.text();
+    if (!r.ok) return { _error: r.status, _body: text.substring(0, 400) };
+    try { return JSON.parse(text); } catch { return { _error: 'json_parse', _body: text.substring(0, 200) }; }
+  } catch (e: any) { return { _error: e.message }; }
 }
 
 async function mpEvents(from: string, to: string, events: string[]) {
-  const params = new URLSearchParams({
-    project_id: PROJECT_ID,
+  return mpGet('events/', new URLSearchParams({
     event: JSON.stringify(events),
     from_date: from,
     to_date: to,
     unit: 'day',
     type: 'general',
-  });
-  try {
-    const r = await fetch(`${BASE}/events/?${params}`, {
-      headers: { Authorization: auth(), Accept: 'application/json' },
-    });
-    const text = await r.text();
-    if (!r.ok) return { error: r.status, body: text.substring(0, 300) };
-    return JSON.parse(text);
-  } catch (e: any) { return { error: e.message }; }
+  }));
 }
 
 async function mpSeg(from: string, to: string, event: string, prop: string) {
-  const params = new URLSearchParams({
-    project_id: PROJECT_ID,
+  const r = await mpGet('segmentation/', new URLSearchParams({
     event,
     from_date: from,
     to_date: to,
     on: `properties["${prop}"]`,
     unit: 'day',
     type: 'general',
-  });
-  try {
-    const r = await fetch(`${BASE}/segmentation/?${params}`, {
-      headers: { Authorization: auth() },
-    });
-    if (!r.ok) return null;
-    return r.json();
-  } catch { return null; }
+  }));
+  return r?._error ? null : r;
 }
 
 function sumVal(data: any, event: string): number {
@@ -81,6 +81,7 @@ function seg(data: any): Record<string, number> {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Cache-Control', 'no-store');
+
   const days = Math.min(Number(req.query.days) || 30, 90);
   const today = new Date();
   const from = dateStr(subDays(today, days));
@@ -88,6 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const pFrom = dateStr(subDays(today, days * 2));
   const pTo = dateStr(subDays(today, days));
 
+  // All batches in parallel
   const [b1, b2, b3, p1, p2] = await Promise.all([
     mpEvents(from, to, ['run_started', 'run_completed']),
     mpEvents(from, to, ['cheer_received', 'cheer_favorited', 'cheer_replayed']),
@@ -107,9 +109,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     mpSeg(from, to, 'subscription_started', 'run_club_member'),
   ]);
 
-  const runs  = sumVal(b1, 'run_started');
-  const runsC = sumVal(b1, 'run_completed');
-  const subs  = sumVal(b3, 'subscription_started');
+  const runs   = sumVal(b1, 'run_started');
+  const runsC  = sumVal(b1, 'run_completed');
+  const subs   = sumVal(b3, 'subscription_started');
   const cheers  = sumVal(b2, 'cheer_received');
   const cheersF = sumVal(b2, 'cheer_favorited');
   const cheersR = sumVal(b2, 'cheer_replayed');
@@ -124,40 +126,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const d = (a: number, b: number) => b > 0 ? Math.round(((a - b) / b) * 100) : null;
   const rate = (a: number, b: number) => b > 0 ? Math.round((a / b) * 100) : null;
 
+  // Debug: show first batch status so we can diagnose
+  const mpStatus = b1?._error ? 'error' : 'connected';
+
   res.status(200).json({
     period: { from, to, days },
-    ok: !b1?.error,
-    mixpanel_error: b1?.error ?? null,
-    mixpanel_error_body: b1?.body ?? null,
-    sources: { mixpanel: b1?.error ? 'error' : 'connected' },
-    totals: {
-      runs, runsCompleted: runsC, subscriptions: subs,
-      cheersReceived: cheers, cheersFavorited: cheersF, cheersReplayed: cheersR,
-      appOpens: opens, onboardingStarted: obStart, onboardingCompleted: obDone, paywallPresented: paywall,
+    ok: !b1?._error,
+    _debug: {
+      secret_length: MIXPANEL_SECRET.length,
+      secret_preview: MIXPANEL_SECRET.substring(0, 8) + '...',
+      b1_error: b1?._error ?? null,
+      b1_error_body: b1?._body ?? null,
+      b1_has_data: !!b1?.data?.values,
+      b1_events: b1?.data?.values ? Object.keys(b1.data.values) : [],
     },
+    sources: { mixpanel: mpStatus },
+    totals: { runs, runsCompleted: runsC, subscriptions: subs, cheersReceived: cheers, cheersFavorited: cheersF, cheersReplayed: cheersR, appOpens: opens, onboardingStarted: obStart, onboardingCompleted: obDone, paywallPresented: paywall },
     deltas: { runs: d(runs, pRuns), subscriptions: d(subs, pSubs), cheers: d(cheers, pCheers) },
-    funnel: {
-      onboardingCompletionRate: rate(obDone, obStart),
-      paywallConversionRate: rate(subs, paywall),
-      runCompletionRate: rate(runsC, runs),
-      cheerFavoriteRate: rate(cheersF, cheers),
-      cheerReplayRate: rate(cheersR, cheers),
-    },
-    series: {
-      runs: daily(b1, 'run_started'),
-      subscriptions: daily(b3, 'subscription_started'),
-      cheers: daily(b2, 'cheer_received'),
-      appOpens: daily(b3, 'app_opened'),
-    },
-    icp: {
-      byGender:       seg(sGender),
-      byAgeGroup:     seg(sAge),
-      byRunningLevel: seg(sLevel),
-      byWatchBrand:   seg(sWatch),
-      byUsageIntent:  seg(sIntent),
-      byDiscovery:    seg(sDisc),
-      byPlanType:     seg(sPlan),
-      byRunClub:      seg(sClub),
-    },
+    funnel: { onboardingCompletionRate: rate(obDone, obStart), paywallConversionRate: rate(subs, paywall), runCompletionRate: rate(runsC, runs), cheerFavoriteRate: rate(cheersF, cheers), cheerReplayRate: rate(cheersR, cheers) },
+    series: { runs: daily(b1, 'run_started'), subscriptions: daily(b3, 'subscription_started'), cheers: daily(b2, 'cheer_received'), appOpens: daily(b3, 'app_opened') },
+    icp: { byGender: seg(sGender), byAgeGroup: seg(sAge), byRunningLevel: seg(sLevel), byWatchBrand: seg(sWatch), byUsageIntent: seg(sIntent), byDiscovery: seg(sDisc), byPlanType: seg(sPlan), byRunClub: seg(sClub) },
   });
 }
