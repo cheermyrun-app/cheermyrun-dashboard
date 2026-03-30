@@ -134,6 +134,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ok: !b1?._error,
     _debug: {
       secret_length: MIXPANEL_SECRET.length,
+      username_length: (process.env.MIXPANEL_USERNAME ?? '').length,
+      username_preview: (process.env.MIXPANEL_USERNAME ?? '').substring(0, 20),
       secret_preview: MIXPANEL_SECRET.substring(0, 8) + '...',
       b1_error: b1?._error ?? null,
       b1_error_body: b1?._body ?? null,
