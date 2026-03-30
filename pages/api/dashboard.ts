@@ -1,27 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { format, subDays } from 'date-fns';
 
-// Service Account credentials (Mixpanel V2 requires Service Account auth)
-const MIXPANEL_SA_USER = process.env.MIXPANEL_SA_USER ?? '';
-const MIXPANEL_SA_SECRET = process.env.MIXPANEL_SA_SECRET ?? '';
-// Fallback: legacy API Secret auth
+// Service Account credentials (Mixpanel V2 projects require Service Accounts)
+const MIXPANEL_USERNAME = process.env.MIXPANEL_USERNAME ?? '';
 const MIXPANEL_SECRET = process.env.MIXPANEL_SECRET ?? '';
-
 const BASE = 'https://data.mixpanel.com/api/2.0';
 
 function dateStr(d: Date) { return format(d, 'yyyy-MM-dd'); }
 
 function auth() {
-  // Service Account takes priority (username:secret)
-  if (MIXPANEL_SA_USER && MIXPANEL_SA_SECRET) {
-    return 'Basic ' + Buffer.from(`${MIXPANEL_SA_USER}:${MIXPANEL_SA_SECRET}`).toString('base64');
-  }
-  // Legacy: API Secret (secret:)
-  return 'Basic ' + Buffer.from(MIXPANEL_SECRET + ':').toString('base64');
-}
-
-function authMode() {
-  return MIXPANEL_SA_USER ? 'service_account' : 'api_secret';
+  // Service Account: Basic username:secret (base64)
+  return 'Basic ' + Buffer.from(`${MIXPANEL_USERNAME}:${MIXPANEL_SECRET}`).toString('base64');
 }
 
 async function mpEvents(from: string, to: string, events: string[]) {
@@ -135,49 +124,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   res.status(200).json({
     period: { from, to, days },
-    auth_mode: authMode(),
     ok: !b1?.error,
     mixpanel_error: b1?.error ?? null,
     mixpanel_error_body: b1?.body ?? null,
     sources: { mixpanel: b1?.error ? 'error' : 'connected' },
-
-    totals: {
-      runs, runsCompleted: runsC, subscriptions: subs,
-      cheersReceived: cheers, cheersFavorited: cheersF, cheersReplayed: cheersR,
-      appOpens: opens, onboardingStarted: obStart, onboardingCompleted: obDone,
-      paywallPresented: paywall,
-    },
-
-    deltas: {
-      runs: d(runs, pRuns),
-      subscriptions: d(subs, pSubs),
-      cheers: d(cheers, pCheers),
-    },
-
-    funnel: {
-      onboardingCompletionRate: rate(obDone, obStart),
-      paywallConversionRate: rate(subs, paywall),
-      runCompletionRate: rate(runsC, runs),
-      cheerFavoriteRate: rate(cheersF, cheers),
-      cheerReplayRate: rate(cheersR, cheers),
-    },
-
-    series: {
-      runs: daily(b1, 'run_started'),
-      subscriptions: daily(b3, 'subscription_started'),
-      cheers: daily(b2, 'cheer_received'),
-      appOpens: daily(b3, 'app_opened'),
-    },
-
-    icp: {
-      byGender: seg(sGender),
-      byAgeGroup: seg(sAge),
-      byRunningLevel: seg(sLevel),
-      byWatchBrand: seg(sWatch),
-      byUsageIntent: seg(sIntent),
-      byDiscovery: seg(sDisc),
-      byPlanType: seg(sPlan),
-      byRunClub: seg(sClub),
-    },
+    totals: { runs, runsCompleted: runsC, subscriptions: subs, cheersReceived: cheers, cheersFavorited: cheersF, cheersReplayed: cheersR, appOpens: opens, onboardingStarted: obStart, onboardingCompleted: obDone, paywallPresented: paywall },
+    deltas: { runs: d(runs, pRuns), subscriptions: d(subs, pSubs), cheers: d(cheers, pCheers) },
+    funnel: { onboardingCompletionRate: rate(obDone, obStart), paywallConversionRate: rate(subs, paywall), runCompletionRate: rate(runsC, runs), cheerFavoriteRate: rate(cheersF, cheers), cheerReplayRate: rate(cheersR, cheers) },
+    series: { runs: daily(b1, 'run_started'), subscriptions: daily(b3, 'subscription_started'), cheers: daily(b2, 'cheer_received'), appOpens: daily(b3, 'app_opened') },
+    icp: { byGender: seg(sGender), byAgeGroup: seg(sAge), byRunningLevel: seg(sLevel), byWatchBrand: seg(sWatch), byUsageIntent: seg(sIntent), byDiscovery: seg(sDisc), byPlanType: seg(sPlan), byRunClub: seg(sClub) },
   });
 }
