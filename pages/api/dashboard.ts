@@ -1,15 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { format, subDays } from 'date-fns';
 
-// Service Account credentials (Mixpanel V2 projects require Service Accounts)
+// Service Account credentials (username:secret → base64 for Basic Auth)
 const MIXPANEL_USERNAME = process.env.MIXPANEL_USERNAME ?? '';
-const MIXPANEL_SECRET = process.env.MIXPANEL_SECRET ?? '';
+const MIXPANEL_SECRET   = process.env.MIXPANEL_SECRET ?? '';
 const BASE = 'https://data.mixpanel.com/api/2.0';
 
 function dateStr(d: Date) { return format(d, 'yyyy-MM-dd'); }
 
 function auth() {
-  // Service Account: Basic username:secret (base64)
+  // Service Account: Basic base64(username:secret)
   return 'Basic ' + Buffer.from(`${MIXPANEL_USERNAME}:${MIXPANEL_SECRET}`).toString('base64');
 }
 
@@ -105,18 +105,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     mpSeg(from, to, 'subscription_started', 'run_club_member'),
   ]);
 
-  const runs = sumVal(b1, 'run_started');
+  const runs  = sumVal(b1, 'run_started');
   const runsC = sumVal(b1, 'run_completed');
-  const subs = sumVal(b3, 'subscription_started');
-  const cheers = sumVal(b2, 'cheer_received');
+  const subs  = sumVal(b3, 'subscription_started');
+  const cheers  = sumVal(b2, 'cheer_received');
   const cheersF = sumVal(b2, 'cheer_favorited');
   const cheersR = sumVal(b2, 'cheer_replayed');
-  const opens = sumVal(b3, 'app_opened');
+  const opens   = sumVal(b3, 'app_opened');
   const obStart = sumVal(b3, 'onboarding_started');
-  const obDone = sumVal(b3, 'onboarding_completed');
+  const obDone  = sumVal(b3, 'onboarding_completed');
   const paywall = sumVal(b3, 'paywall_presented');
-  const pRuns = sumVal(p1, 'run_started');
-  const pSubs = sumVal(p2, 'subscription_started');
+  const pRuns   = sumVal(p1, 'run_started');
+  const pSubs   = sumVal(p2, 'subscription_started');
   const pCheers = sumVal(p2, 'cheer_received');
 
   const d = (a: number, b: number) => b > 0 ? Math.round(((a - b) / b) * 100) : null;
@@ -128,10 +128,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     mixpanel_error: b1?.error ?? null,
     mixpanel_error_body: b1?.body ?? null,
     sources: { mixpanel: b1?.error ? 'error' : 'connected' },
-    totals: { runs, runsCompleted: runsC, subscriptions: subs, cheersReceived: cheers, cheersFavorited: cheersF, cheersReplayed: cheersR, appOpens: opens, onboardingStarted: obStart, onboardingCompleted: obDone, paywallPresented: paywall },
+    totals: {
+      runs, runsCompleted: runsC, subscriptions: subs,
+      cheersReceived: cheers, cheersFavorited: cheersF, cheersReplayed: cheersR,
+      appOpens: opens, onboardingStarted: obStart, onboardingCompleted: obDone, paywallPresented: paywall,
+    },
     deltas: { runs: d(runs, pRuns), subscriptions: d(subs, pSubs), cheers: d(cheers, pCheers) },
-    funnel: { onboardingCompletionRate: rate(obDone, obStart), paywallConversionRate: rate(subs, paywall), runCompletionRate: rate(runsC, runs), cheerFavoriteRate: rate(cheersF, cheers), cheerReplayRate: rate(cheersR, cheers) },
-    series: { runs: daily(b1, 'run_started'), subscriptions: daily(b3, 'subscription_started'), cheers: daily(b2, 'cheer_received'), appOpens: daily(b3, 'app_opened') },
-    icp: { byGender: seg(sGender), byAgeGroup: seg(sAge), byRunningLevel: seg(sLevel), byWatchBrand: seg(sWatch), byUsageIntent: seg(sIntent), byDiscovery: seg(sDisc), byPlanType: seg(sPlan), byRunClub: seg(sClub) },
+    funnel: {
+      onboardingCompletionRate: rate(obDone, obStart),
+      paywallConversionRate: rate(subs, paywall),
+      runCompletionRate: rate(runsC, runs),
+      cheerFavoriteRate: rate(cheersF, cheers),
+      cheerReplayRate: rate(cheersR, cheers),
+    },
+    series: {
+      runs: daily(b1, 'run_started'),
+      subscriptions: daily(b3, 'subscription_started'),
+      cheers: daily(b2, 'cheer_received'),
+      appOpens: daily(b3, 'app_opened'),
+    },
+    icp: {
+      byGender:       seg(sGender),
+      byAgeGroup:     seg(sAge),
+      byRunningLevel: seg(sLevel),
+      byWatchBrand:   seg(sWatch),
+      byUsageIntent:  seg(sIntent),
+      byDiscovery:    seg(sDisc),
+      byPlanType:     seg(sPlan),
+      byRunClub:      seg(sClub),
+    },
   });
 }
