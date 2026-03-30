@@ -1,20 +1,21 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { format, subDays } from 'date-fns';
 
-// Service Account credentials (username:secret → base64 for Basic Auth)
 const MIXPANEL_USERNAME = process.env.MIXPANEL_USERNAME ?? '';
 const MIXPANEL_SECRET   = process.env.MIXPANEL_SECRET ?? '';
+// Project ID is in the Mixpanel URL: mixpanel.com/project/3993852
+const PROJECT_ID = '3993852';
 const BASE = 'https://data.mixpanel.com/api/2.0';
 
 function dateStr(d: Date) { return format(d, 'yyyy-MM-dd'); }
 
 function auth() {
-  // Service Account: Basic base64(username:secret)
   return 'Basic ' + Buffer.from(`${MIXPANEL_USERNAME}:${MIXPANEL_SECRET}`).toString('base64');
 }
 
 async function mpEvents(from: string, to: string, events: string[]) {
   const params = new URLSearchParams({
+    project_id: PROJECT_ID,
     event: JSON.stringify(events),
     from_date: from,
     to_date: to,
@@ -33,6 +34,7 @@ async function mpEvents(from: string, to: string, events: string[]) {
 
 async function mpSeg(from: string, to: string, event: string, prop: string) {
   const params = new URLSearchParams({
+    project_id: PROJECT_ID,
     event,
     from_date: from,
     to_date: to,
