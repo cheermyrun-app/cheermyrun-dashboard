@@ -10,7 +10,7 @@ function dateStr(d: Date) { return format(d, 'yyyy-MM-dd'); }
 
 // Basic auth: base64(secret + ":") — empty password, secret as username
 function auth() {
-  return 'Basic ' + Buffer.from(MIXPANEL_SECRET + ':').toString('base64');
+  return 'Basic ' + Buffer.from((process.env.MIXPANEL_USERNAME ?? '') + ':' + MIXPANEL_SECRET).toString('base64');
 }
 
 async function mpGet(endpoint: string, params: URLSearchParams) {
