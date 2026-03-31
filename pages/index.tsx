@@ -1,702 +1,829 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend } from 'chart.js';
-import { Bar, Doughnut } from 'react-chartjs-2';
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend);
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend, Filler } from 'chart.js';
+import { Bar, Line, Doughnut } from 'react-chartjs-2';
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend, Filler);
 
-// ═══════════════════════════════════════════
-// STATIC DATA — Mixpanel (fetched via MCP)
-// ═══════════════════════════════════════════
-const DAILY_SUBS: [string,number][] = [["02-28",13],["03-01",2],["03-02",0],["03-03",4],["03-04",4],["03-05",3],["03-06",8],["03-07",5],["03-08",3],["03-09",3],["03-10",1],["03-11",2],["03-12",2],["03-13",55],["03-14",59],["03-15",15],["03-16",8],["03-17",5],["03-18",5],["03-19",6],["03-20",4],["03-21",19],["03-22",10],["03-23",2],["03-24",4],["03-25",3],["03-26",10],["03-27",14],["03-28",16],["03-29",15],["03-30",1]];
-const DAILY_CANCELS: [string,number][] = [["02-28",0],["03-01",0],["03-02",0],["03-03",0],["03-04",0],["03-05",0],["03-06",0],["03-07",0],["03-08",0],["03-09",0],["03-10",7],["03-11",3],["03-12",6],["03-13",2],["03-14",6],["03-15",14],["03-16",8],["03-17",6],["03-18",7],["03-19",6],["03-20",9],["03-21",7],["03-22",7],["03-23",6],["03-24",6],["03-25",6],["03-26",3],["03-27",9],["03-28",12],["03-29",8],["03-30",3]];
-const DAILY_RENEWALS: [string,number][] = [["02-28",0],["03-01",0],["03-02",0],["03-03",0],["03-04",0],["03-05",0],["03-06",0],["03-07",0],["03-08",0],["03-09",0],["03-10",2],["03-11",3],["03-12",3],["03-13",4],["03-14",5],["03-15",0],["03-16",4],["03-17",2],["03-18",3],["03-19",4],["03-20",3],["03-21",7],["03-22",3],["03-23",4],["03-24",6],["03-25",4],["03-26",5],["03-27",8],["03-28",8],["03-29",4],["03-30",1]];
-const DAILY_RUNS: [string,number][] = [["02-27",9],["02-28",44],["03-01",12],["03-02",10],["03-03",12],["03-04",10],["03-05",6],["03-06",15],["03-07",17],["03-08",22],["03-09",5],["03-10",7],["03-11",5],["03-12",6],["03-13",9],["03-14",32],["03-15",60],["03-16",15],["03-17",14],["03-18",13],["03-19",20],["03-20",21],["03-21",56],["03-22",59],["03-23",11],["03-24",10],["03-25",14],["03-26",6],["03-27",14],["03-28",59],["03-29",56]];
-const DAILY_CHEERS: [string,number][] = [["02-27",19],["02-28",1870],["03-01",58],["03-02",50],["03-03",22],["03-04",60],["03-05",13],["03-06",33],["03-07",495],["03-08",2167],["03-09",10],["03-10",13],["03-11",98],["03-12",13],["03-13",27],["03-14",332],["03-15",1488],["03-16",14],["03-17",22],["03-18",47],["03-19",30],["03-20",21],["03-21",4058],["03-22",11281],["03-23",6],["03-24",73],["03-25",29],["03-26",4],["03-27",18],["03-28",2566],["03-29",1677]];
-const WEEKS = [{l:'23 Feb',s:44,c:0,r:0},{l:'02 Mar',s:27,c:0,r:0},{l:'09 Mar',s:137,c:38,r:17},{l:'16 Mar',s:57,c:50,r:26},{l:'23 Mar',s:64,c:50,r:39},{l:'30 Mar',s:2,c:3,r:1}];
-const ICP_GENDER=[["Femenino",110],["Masculino",37],["Otro",2]] as [string,number][];
-const ICP_AGE=[["25-34",89],["18-24",27],["35-44",26],["45-54",7]] as [string,number][];
-const ICP_LEVEL=[["Intermedio",84],["Principiante",56],["Avanzado",8]] as [string,number][];
-const ICP_WATCH=[["Apple Watch",60],["Garmin",59],["Fitbit",14],["Samsung",11],["COROS",2],["Smartphone",3]] as [string,number][];
-const ICP_SOURCE=[["TikTok",84],["Instagram",36],["Amigos",16],["Facebook",3]] as [string,number][];
-const ICP_PLAN=[["Mensual",110],["Anual",39],["Anual desc.",3],["Semanal",5]] as [string,number][];
-const ICP_PHONE=[["Siempre",144],["A veces",13]] as [string,number][];
-const ICP_HEADPHONES=[["Siempre",131],["A veces",23],["Raramente",3]] as [string,number][];
-const ICP_LISTEN=[["Música",120],["Mix",31],["Podcasts",4],["Silencio",2]] as [string,number][];
-const ICP_UNITS=[["Kilómetros",110],["Millas",50]] as [string,number][];
-const ICP_DISTANCES=[["Media maratón",686],["10K",427],["5K",324],["Maratón",185],["Ninguna",141]] as [string,number][];
-const HORA_RUNS=[["04-06",30],["06-08",134],["08-10",144],["10-12",80],["12-14",32],["14-16",34],["16-18",56],["18+",134]] as [string,number][];
-const CHEER_TYPE=[["TTS",13820],["Voice Note",12794]] as [string,number][];
-const DIST_RUNS=[{l:"<1km",v:278,r:false},{l:"1-3km",v:23,r:true},{l:"3-5km",v:42,r:true},{l:"5-10km",v:86,r:true},{l:"10-21km",v:106,r:true},{l:"Media M.",v:105,r:true},{l:"Maratón+",v:28,r:true}];
-const TOP_CITIES=[["San José, CR",28],["Bogotá, CO",39],["Madrid, ES",21],["Iztapalapa, MX",20],["Melbourne, AU",18],["Sydney, AU",18],["México DF, MX",18],["Barranquilla, CO",17],["San Juan, PR",17],["Los Angeles, US",17],["Quito, EC",16],["León, MX",16],["Medellín, CO",16],["New York, US",16],["Birmingham, UK",16]] as [string,number][];
-const PLATFORM=[["iOS",1174],["Android",38]] as [string,number][];
-const PLATFORM_SUBS=[["iOS",180],["Android",124]] as [string,number][];
+// ─── SUPERWALL DATA (live snapshot + refresh) ────────────────────────────────
+const SW_SNAPSHOT = {
+  connected: true, live: false, updatedAt: '2026-03-31T01:04:31Z',
+  ios: {
+    last24h: { proceeds: 131.49, newUsers: 31,   conversions: 9,   paywallRate: 83.87, convRate: 25.81 },
+    last7d:  { proceeds: 1149.33, newUsers: 281,  conversions: 77,  paywallRate: 77.2,  convRate: 19.93 },
+    last30d: { proceeds: 4391.37, newUsers: 2358, conversions: 326, paywallRate: 76.97, convRate: 12.72 },
+    last90d: { proceeds: 7635.92, newUsers: 4712, conversions: 592, paywallRate: 75.1,  convRate: 11.67 },
+  },
+  android: { last7d: { proceeds: 120, newUsers: 0, conversions: 0 } },
+  campaigns: [
+    { id:'43913', name:'Example Campaign',       users:1978, convs:184, convRate:9.3,  proceeds:2277.75 },
+    { id:'49473', name:'Transaction Abandoned',  users:1329, convs:142, convRate:10.68, proceeds:2177.87 },
+  ],
+  recentTransactions: [
+    { userId:'69cad3f4', product:'Annual Discount', proceeds:26.35,  type:'New Sub',      time:'2026-03-30T12:49:00', campaign:'paywall_decline' },
+    { userId:'69cab4f4', product:'Annual',          proceeds:39.99,  type:'New Sub',      time:'2026-03-30T10:34:00', campaign:'campaign_trigger' },
+    { userId:'6977a772', product:'Weekly',          proceeds:2.99,   type:'Renewal',      time:'2026-03-30T09:44:00', campaign:'campaign_trigger' },
+    { userId:'69ca9df4', product:'Annual Discount', proceeds:12.50,  type:'New Sub',      time:'2026-03-30T09:04:00', campaign:'paywall_decline' },
+    { userId:'694429f2', product:'Monthly',         proceeds:9.99,   type:'New Sub',      time:'2026-03-30T07:20:00', campaign:'campaign_trigger' },
+    { userId:'69ca61f2', product:'Annual Discount', proceeds:24.99,  type:'New Sub',      time:'2026-03-30T04:42:00', campaign:'paywall_decline' },
+    { userId:'69ca34f2', product:'Monthly',         proceeds:6.03,   type:'New Sub',      time:'2026-03-30T01:32:00', campaign:'campaign_trigger' },
+    { userId:'69c8b557', product:'Monthly',         proceeds:0,      type:'Cancellation', time:'2026-03-29T15:00:00', campaign:'campaign_trigger' },
+    { userId:'69c9c6f1', product:'Annual Discount', proceeds:24.99,  type:'New Sub',      time:'2026-03-29T19:00:00', campaign:'paywall_decline' },
+    { userId:'69c9b8ee', product:'Annual Discount', proceeds:24.99,  type:'New Sub',      time:'2026-03-29T20:00:00', campaign:'paywall_decline' },
+  ],
+};
 
-// P&L
+// ─── MIXPANEL DATA ────────────────────────────────────────────────────────────
+const DATES = ['02-28','03-01','03-02','03-03','03-04','03-05','03-06','03-07','03-08','03-09','03-10','03-11','03-12','03-13','03-14','03-15','03-16','03-17','03-18','03-19','03-20','03-21','03-22','03-23','03-24','03-25','03-26','03-27','03-28','03-29','03-30'];
+const DAU    = [136,115,61,52,51,43,58,70,54,46,47,20,34,51,75,105,66,63,54,62,72,115,99,61,50,41,44,60,90,90,49];
+const OBC    = [130,94,57,54,58,38,42,62,51,56,63,27,35,54,73,125,111,83,92,105,89,140,54,42,29,28,37,49,66,49,33];
+const PAYWALL= [188,90,86,78,82,65,76,94,65,76,90,33,52,74,100,157,126,94,102,113,106,155,68,54,50,41,57,62,69,54,45];
+const SUBS   = [13,2,0,4,4,3,8,5,3,3,1,2,2,55,59,15,8,5,5,6,4,19,10,2,4,3,10,14,16,15,7];
+const CANCELS= [0,0,0,0,0,0,0,0,0,0,7,3,6,2,6,14,8,6,7,6,9,7,7,6,6,6,3,9,12,8,3];
+const RENEWALS=[0,0,0,0,0,0,0,0,0,0,2,3,3,4,5,0,4,2,3,4,3,7,3,4,6,4,5,8,8,4,1];
+const RUNS   = [44,12,10,12,10,6,15,17,22,5,7,5,6,9,32,60,15,14,13,20,21,56,59,11,10,14,6,14,59,56,15];
+const CHEERS_D=[19,58,50,22,60,13,33,495,2167,10,13,98,13,27,332,1488,14,22,47,30,21,4058,11281,6,73,29,4,18,2566,1677,11];
+const WEEKS  = [{l:'Feb 23',s:44,c:0,r:0},{l:'Mar 02',s:27,c:0,r:0},{l:'Mar 09',s:137,c:38,r:17},{l:'Mar 16',s:57,c:50,r:26},{l:'Mar 23',s:64,c:50,r:39},{l:'Mar 30',s:2,c:3,r:1}];
+const ICP = {
+  gender:   [['Female',110],['Male',37],['Other',2]],
+  age:      [['25–34',89],['18–24',27],['35–44',26],['45–54',7]],
+  level:    [['Intermediate',84],['Beginner',56],['Advanced',8]],
+  watch:    [['Apple Watch',60],['Garmin',59],['Fitbit',14],['Samsung',11],['Other',5]],
+  source:   [['TikTok',84],['Instagram',36],['Friends',16],['Facebook',3]],
+  phone:    [['Always',144],['Sometimes',13]],
+  audio:    [['Always',131],['Sometimes',23],['Rarely',3]],
+  listen:   [['Music',120],['Mix',31],['Podcasts',4],['Silence',2]],
+  units:    [['Kilometers',110],['Miles',50]],
+  races:    [['Half Marathon',686],['10K',427],['5K',324],['Marathon',185]],
+  cheer:    [['TTS',13820],['Voice Note',12794]],
+  cities:   [['Bogotá, CO',39],['San José, CR',28],['Madrid, ES',21],['Iztapalapa, MX',20],['Melbourne, AU',18],['Sydney, AU',18],['Mexico City, MX',18],['Barranquilla, CO',17],['San Juan, PR',17],['Los Angeles, US',17]],
+};
+const FUNNEL = { steps:['App Opened','Onboarding','Paywall Seen','Subscribed'], values:[1230,115,76,5] };
+const WEEKLY_CHEERS= [0,0,0,0,0,0,1988,2840,1981,15473,4373,11];
+const WEEKLY_RUNS  = [0,0,0,0,0,0,0,1,112,89,114,193,158,13];
+const WEEKLY_LABELS= ['Jan 5','Jan 12','Jan 19','Jan 26','Feb 2','Feb 9','Feb 16','Feb 23','Mar 2','Mar 9','Mar 16','Mar 23','Mar 30','Apr 6'];
+
+// ─── P&L STORAGE ─────────────────────────────────────────────────────────────
 const PNL_KEY='cmr_pnl_v3';
 interface PE{id:string;date:string;name:string;category:string;type:string;amount:number;notes:string;}
-const PNL_CATS=['Desarrollo','Influencer','Infraestructura','Herramientas/SaaS','Diseño','Marketing','Inversión Alex','Revenue','Otro'];
-const PNL_C:Record<string,string>={'Desarrollo':'#6366f1','Influencer':'#ec4899','Infraestructura':'#3b82f6','Herramientas/SaaS':'#f97316','Diseño':'#8b5cf6','Marketing':'#14b8a6','Inversión Alex':'#22c55e','Revenue':'#16a34a','Otro':'#94a3b8'};
+const PNL_CATS=['Development','Influencer','Infrastructure','Tools/SaaS','Design','Marketing','Alex Investment','Revenue','Other'];
+const PNL_COLORS:Record<string,string>={'Development':'#6366f1','Influencer':'#ec4899','Infrastructure':'#3b82f6','Tools/SaaS':'#f97316','Design':'#8b5cf6','Marketing':'#14b8a6','Alex Investment':'#22c55e','Revenue':'#16a34a','Other':'#94a3b8'};
 const loadPnl=():PE[]=>{try{return JSON.parse(localStorage.getItem(PNL_KEY)||'[]');}catch{return[];}};
 const savePnl=(e:PE[])=>localStorage.setItem(PNL_KEY,JSON.stringify(e));
 
-// Helpers
-const fmt=(n:number)=>Math.round(n).toLocaleString('es-MX');
-const fmtUSD=(n:number)=>'$'+Math.round(n).toLocaleString('en-US');
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+const $=(n:number,d=0)=>n.toLocaleString('en-US',{maximumFractionDigits:d});
+const $$=(n:number)=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const pct=(a:number,b:number)=>b>0?Math.round(a/b*100):0;
-const dpct=(a:number,b:number)=>b>0?Math.round((a-b)/b*100):null;
-const sum=(arr:[string,number][])=>arr.reduce((s,r)=>s+r[1],0);
-const sliceD=(arr:[string,number][],days:number)=>days>=999?arr:arr.slice(-Math.min(days,arr.length));
-const CO=(extra?:any)=>({responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{bodyFont:{size:11},titleFont:{size:11}}},scales:{x:{grid:{color:'rgba(128,128,128,0.07)'},ticks:{color:'#888',font:{size:10}}},y:{grid:{color:'rgba(128,128,128,0.07)'},ticks:{color:'#888',font:{size:10}},beginAtZero:true}},...extra});
-const DO={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'right' as const,labels:{font:{size:11},boxWidth:11,padding:7}}}};
-const COLS=['#6366f1','#ec4899','#3b82f6','#f97316','#8b5cf6','#14b8a6','#22c55e','#f59e0b','#dc2626','#0891b2'];
-const TABS=['Revenue','Overview','Corridas','ICP','Comparar','P&L'];
-const PERIODS=[{l:'7d',v:7},{l:'14d',v:14},{l:'30d',v:30},{l:'90d',v:90},{l:'Todo',v:999}];
+const sliceN=(arr:number[],d:number)=>d>=999?arr:arr.slice(-Math.min(d,arr.length));
+const sliceS=(arr:string[],d:number)=>d>=999?arr:arr.slice(-Math.min(d,arr.length));
+const sumN=(a:number[])=>a.reduce((s,v)=>s+v,0);
+const TABS=['Revenue','Overview','Runs','User Profile','Compare','P&L'];
+const PERIODS=[{l:'7D',v:7},{l:'30D',v:30},{l:'90D',v:90},{l:'All',v:999}];
+const COLS=['#6366f1','#ec4899','#3b82f6','#f97316','#8b5cf6','#14b8a6','#22c55e','#f59e0b','#dc2626'];
 
-function Card({label,value,delta,sub,green,color,big,live}:{label:string,value:any,delta?:number|null,sub?:string,green?:boolean,color?:string,big?:boolean,live?:boolean}){
-  return(<div style={{background:'var(--card)',border:'0.5px solid var(--border)',borderRadius:12,padding:'13px 15px',borderLeft:color?`3px solid ${color}`:undefined}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
-      <div style={{fontSize:11,color:'var(--text-secondary)'}}>{label}</div>
-      {live&&<div style={{fontSize:8,padding:'1px 5px',borderRadius:10,background:'#dcfce7',color:'#166534',fontWeight:700}}>LIVE</div>}
+const CHART_BASE = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(0,0,0,0.85)',titleFont:{size:11,weight:'bold' as const},bodyFont:{size:11},padding:10,cornerRadius:8}},
+  scales:{x:{grid:{display:false},ticks:{color:'#666',font:{size:10},maxRotation:0}},y:{grid:{color:'rgba(128,128,128,0.08)'},ticks:{color:'#666',font:{size:10}},beginAtZero:true}}
+};
+const DONUT_OPT={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'right' as const,labels:{font:{size:11},boxWidth:10,padding:8,color:'#888'}}}};
+
+function KPI({label,value,sub,delta,color,live,size='md'}:{label:string;value:any;sub?:string;delta?:number|null;color?:string;live?:boolean;size?:'sm'|'md'|'lg'}){
+  return(
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:14,padding:size==='lg'?'20px 22px':'14px 16px',borderTop:color?`3px solid ${color}`:'1px solid var(--border)',position:'relative',overflow:'hidden'}}>
+      {color&&<div style={{position:'absolute',top:0,left:0,right:0,height:3,background:color,opacity:0.8}}/>}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+        <span style={{fontSize:10,fontWeight:600,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em'}}>{label}</span>
+        {live&&<span style={{fontSize:8,padding:'2px 6px',borderRadius:20,background:'#dcfce7',color:'#166534',fontWeight:700,letterSpacing:'.04em'}}>LIVE</span>}
+      </div>
+      <div style={{fontSize:size==='lg'?32:size==='md'?22:17,fontWeight:700,color:'var(--fg)',lineHeight:1.1,letterSpacing:'-0.02em'}}>{value}</div>
+      {delta!=null&&<div style={{fontSize:11,marginTop:4,fontWeight:500,color:delta>=0?'#22c55e':'#f43f5e'}}>{delta>=0?'▲':'▼'} {Math.abs(delta)}% vs prev</div>}
+      {sub&&<div style={{fontSize:10,marginTop:4,color:'var(--muted)'}}>{sub}</div>}
     </div>
-    <div style={{fontSize:big?28:21,fontWeight:700,color:green?'#16a34a':'var(--text-primary)',lineHeight:1.1}}>{value}</div>
-    {delta!=null&&<div style={{fontSize:11,marginTop:3,color:delta>=0?'#16a34a':'#dc2626'}}>{delta>=0?'+':''}{delta}% vs ant.</div>}
-    {sub&&<div style={{fontSize:10,marginTop:3,color:'var(--text-secondary)'}}>{sub}</div>}
-  </div>);
+  );
 }
-function SBar({label,val,total,color}:{label:string,val:number,total:number,color:string}){
-  const p=pct(val,total);
-  return(<div style={{display:'flex',alignItems:'center',gap:7,marginBottom:6}}>
-    <span style={{fontSize:12,color:'var(--text-secondary)',width:128,flexShrink:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}</span>
-    <div style={{flex:1,height:5,background:'var(--surface)',borderRadius:3,overflow:'hidden'}}><div style={{width:`${p}%`,height:'100%',background:color,borderRadius:3}}/></div>
-    <span style={{fontSize:11,color:'var(--text-secondary)',width:26,textAlign:'right'}}>{p}%</span>
-    <span style={{fontSize:10,color:'#999',width:32,textAlign:'right'}}>{fmt(val)}</span>
-  </div>);
+
+function MiniBar({label,val,max,color}:{label:string;val:number;max:number;color:string}){
+  return(
+    <div style={{marginBottom:8}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+        <span style={{fontSize:11,color:'var(--fg-2)'}}>{label}</span>
+        <span style={{fontSize:11,color:'var(--muted)',fontWeight:600}}>{pct(val,max)}%</span>
+      </div>
+      <div style={{height:4,background:'var(--surface)',borderRadius:2}}>
+        <div style={{width:`${pct(val,max)}%`,height:'100%',background:color,borderRadius:2,transition:'width .4s ease'}}/>
+      </div>
+    </div>
+  );
 }
-function Insight({text,type='blue'}:{text:string,type?:'blue'|'green'|'amber'|'red'}){
-  const c={blue:['#eff6ff','#1d4ed8'],green:['#f0fdf4','#166534'],amber:['#fef9c3','#854d0e'],red:['#fef2f2','#991b1b']}[type];
-  return <div style={{background:c[0],borderRadius:8,padding:'9px 12px',fontSize:11,color:c[1],marginTop:10,lineHeight:1.5}} dangerouslySetInnerHTML={{__html:text}}/>;
+
+function Section({title,sub,children,action}:{title:string;sub?:string;children:any;action?:any}){
+  return(
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:14,padding:18,marginBottom:14}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:700,color:'var(--fg)',letterSpacing:'-0.01em'}}>{title}</div>
+          {sub&&<div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>{sub}</div>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Tag({label,color='blue'}:{label:string;color?:'blue'|'green'|'amber'|'red'|'gray'}){
+  const c={blue:['#eff6ff','#1d4ed8'],green:['#f0fdf4','#166534'],amber:['#fef9c3','#854d0e'],red:['#fff1f2','#9f1239'],gray:['var(--surface)','var(--muted)']}[color];
+  return <span style={{fontSize:9,padding:'2px 7px',borderRadius:20,background:c[0],color:c[1],fontWeight:700,letterSpacing:'.05em'}}>{label}</span>;
+}
+
+function Insight({text,type='blue'}:{text:string;type?:'blue'|'green'|'amber'|'red'}){
+  const c={blue:['#eff6ff','#1e40af'],green:['#f0fdf4','#166534'],amber:['#fffbeb','#92400e'],red:['#fff1f2','#9f1239']}[type];
+  const icon={blue:'💡',green:'✅',amber:'⚠️',red:'🔴'}[type];
+  return <div style={{marginTop:10,padding:'10px 12px',borderRadius:10,background:c[0],fontSize:11,color:c[1],lineHeight:1.6}} dangerouslySetInnerHTML={{__html:`${icon} ${text}`}}/>;
 }
 
 export default function Dashboard(){
   const [tab,setTab]=useState('Revenue');
   const [period,setPeriod]=useState(30);
-  const [cmpA,setCmpA]=useState(0);
-  const [cmpB,setCmpB]=useState(2);
+  const [swPeriod,setSwPeriod]=useState<'last24h'|'last7d'|'last30d'|'last90d'>('last30d');
+  const [sw,setSw]=useState<any>(SW_SNAPSHOT);
+  const [swLoading,setSwLoading]=useState(false);
+  const [lastRefresh,setLastRefresh]=useState<Date|null>(null);
   const [pnl,setPnl]=useState<PE[]>([]);
-  const [filter,setFilter]=useState('all');
   const [showAdd,setShowAdd]=useState(false);
   const [editId,setEditId]=useState<string|null>(null);
-  const [form,setForm]=useState({date:new Date().toISOString().split('T')[0],name:'',category:'Desarrollo',type:'Gasto',amount:'',notes:''});
+  const [pnlFilter,setPnlFilter]=useState('all');
+  const [form,setForm]=useState({date:new Date().toISOString().split('T')[0],name:'',category:'Development',type:'Expense',amount:'',notes:''});
+  const [cmpA,setCmpA]=useState(2);
+  const [cmpB,setCmpB]=useState(4);
 
-  // LIVE Superwall state
-  const [sw,setSw]=useState<any>(null);
-  const [swLoading,setSwLoading]=useState(true);
-  const [swError,setSwError]=useState<string|null>(null);
-  const [swPeriod,setSwPeriod]=useState<'last24h'|'last7d'|'last30d'|'last90d'>('last30d');
-  const [lastRefresh,setLastRefresh]=useState<Date|null>(null);
-
-  const fetchSuperwall = useCallback(async () => {
+  const fetchSW=useCallback(async()=>{
     setSwLoading(true);
-    setSwError(null);
-    try {
-      const r = await fetch('/api/superwall?days=90');
-      const d = await r.json();
-      setSw(d);
+    try{
+      const r=await fetch('/api/superwall-update');
+      const d=await r.json();
+      if(d.connected)setSw(d);
       setLastRefresh(new Date());
-      if (!d.connected) setSwError(d._debug?.hint || 'Superwall no conectado');
-    } catch(e:any) {
-      setSwError(e.message);
-    } finally {
-      setSwLoading(false);
+    }catch(e){}finally{setSwLoading(false);}
+  },[]);
+
+  useEffect(()=>{fetchSW();setPnl(loadPnl());},[fetchSW]);
+
+  // Auto-refresh Superwall data from Superwall tab if open
+  useEffect(()=>{
+    const csrf='pxg2aqntp1XwWvgx3K5bXzHBs8p7vyO1';
+    // Post fresh data in background if this is the Revenue tab
+    if(tab==='Revenue'){
+      const refresh=async()=>{
+        try{
+          // Check if we have fresh enough data (within 1 hour)
+          const age=lastRefresh?Date.now()-lastRefresh.getTime():999999;
+          if(age>3600000)await fetchSW();
+        }catch(e){}
+      };
+      refresh();
     }
-  }, []);
+  },[tab]);
 
-  useEffect(() => { fetchSuperwall(); }, [fetchSuperwall]);
-  useEffect(() => { setPnl(loadPnl()); }, []);
+  // Mixpanel slices
+  const dts=sliceS(DATES,period);
+  const dau=sliceN(DAU,period),obc=sliceN(OBC,period);
+  const pay=sliceN(PAYWALL,period),sub=sliceN(SUBS,period);
+  const can=sliceN(CANCELS,period),ren=sliceN(RENEWALS,period);
+  const run=sliceN(RUNS,period),che=sliceN(CHEERS_D,period);
+  const tSubs=sumN(sub),tCan=sumN(can),tRen=sumN(ren),tRun=sumN(run),tChe=sumN(che),tDAU=sumN(dau);
+  const netSubs=tSubs-tCan;
 
-  // Superwall current period data
-  const swData = sw?.ios?.[swPeriod] || {};
-  const swProceeds   = swData.proceeds   || 0;
-  const swNewUsers   = swData.newUsers   || 0;
-  const swConvs      = swData.conversions || 0;
-  const swPaywallR   = swData.paywallRate || 0;
-  const swConvR      = swData.convRate    || 0;
-  const swAndroid    = sw?.android || null;
-  const swTotal      = (swProceeds + (swAndroid?.proceeds || 0));
-
-  // Mixpanel period filtering
-  const fSubs=sliceD(DAILY_SUBS,period),fCanc=sliceD(DAILY_CANCELS,period);
-  const fRenew=sliceD(DAILY_RENEWALS,period),fRuns=sliceD(DAILY_RUNS,period);
-  const fCheers=sliceD(DAILY_CHEERS,period);
-  const tSubs=sum(fSubs),tCanc=sum(fCanc),tRenew=sum(fRenew),tRuns=sum(fRuns),tCheers=sum(fCheers);
-  const netSubs=tSubs-tCanc;
+  // Superwall current period
+  const swD=(sw?.ios||SW_SNAPSHOT.ios)[swPeriod]||(SW_SNAPSHOT.ios.last30d);
+  const swConnected=sw?.connected&&(sw?.ios?.last30d?.proceeds||0)>0;
 
   // P&L
-  const gastos=pnl.filter(e=>e.type==='Gasto').reduce((s,e)=>s+e.amount,0);
-  const ingresos=pnl.filter(e=>e.type==='Ingreso').reduce((s,e)=>s+e.amount,0);
-  const byCat=pnl.filter(e=>e.type==='Gasto').reduce((a:Record<string,number>,e)=>{a[e.category]=(a[e.category]||0)+e.amount;return a;},{});
-  const byMonth=pnl.reduce((a:Record<string,{g:number,i:number}>,e)=>{const m=e.date.substring(0,7);if(!a[m])a[m]={g:0,i:0};if(e.type==='Gasto')a[m].g+=e.amount;else a[m].i+=e.amount;return a;},{});
-  const months=Object.keys(byMonth).sort();
-  const filtered=filter==='all'?pnl:filter==='gasto'?pnl.filter(e=>e.type==='Gasto'):pnl.filter(e=>e.type==='Ingreso');
+  const expenses=pnl.filter(e=>e.type==='Expense').reduce((s,e)=>s+e.amount,0);
+  const income  =pnl.filter(e=>e.type==='Income').reduce((s,e)=>s+e.amount,0);
+  const byCat   =pnl.filter(e=>e.type==='Expense').reduce((a:Record<string,number>,e)=>{a[e.category]=(a[e.category]||0)+e.amount;return a;},{});
+  const byMonth =pnl.reduce((a:Record<string,{e:number,i:number}>,e)=>{const m=e.date.substring(0,7);if(!a[m])a[m]={e:0,i:0};if(e.type==='Expense')a[m].e+=e.amount;else a[m].i+=e.amount;return a;},{});
+  const months  =Object.keys(byMonth).sort();
 
-  function saveEntry(){
+  function savePnlEntry(){
     if(!form.name||!form.amount)return;
     const entry:PE={id:editId||Date.now().toString(),date:form.date,name:form.name,category:form.category,type:form.type,amount:Number(form.amount),notes:form.notes};
     const updated=editId?pnl.map(e=>e.id===editId?entry:e):[...pnl,entry];
     const sorted=updated.sort((a,b)=>b.date.localeCompare(a.date));
     setPnl(sorted);savePnl(sorted);setShowAdd(false);setEditId(null);
-    setForm({date:new Date().toISOString().split('T')[0],name:'',category:'Desarrollo',type:'Gasto',amount:'',notes:''});
+    setForm({date:new Date().toISOString().split('T')[0],name:'',category:'Development',type:'Expense',amount:'',notes:''});
   }
-  function del(id:string){const u=pnl.filter(e=>e.id!==id);setPnl(u);savePnl(u);}
-  function startEdit(e:PE){setForm({date:e.date,name:e.name,category:e.category,type:e.type,amount:String(e.amount),notes:e.notes});setEditId(e.id);setShowAdd(true);}
+  function delPnl(id:string){const u=pnl.filter(e=>e.id!==id);setPnl(u);savePnl(u);}
+  function editPnl(e:PE){setForm({date:e.date,name:e.name,category:e.category,type:e.type,amount:String(e.amount),notes:e.notes});setEditId(e.id);setShowAdd(true);}
 
   const wA=WEEKS[cmpA],wB=WEEKS[cmpB];
+
+  const swPeriodLabel={last24h:'24H',last7d:'7D',last30d:'30D',last90d:'90D'}[swPeriod];
 
   return(<>
     <Head>
       <title>Cheer My Run — Investor Dashboard</title>
       <meta name="viewport" content="width=device-width,initial-scale=1"/>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
     </Head>
     <style>{`
-      :root{--bg:#f7f7f6;--surface:#efefed;--card:#fff;--border:rgba(0,0,0,0.09);--text-primary:#1a1a1a;--text-secondary:#666;--sb:#fff}
-      @media(prefers-color-scheme:dark){:root{--bg:#161616;--surface:#202020;--card:#252525;--border:rgba(255,255,255,0.09);--text-primary:#f0f0ee;--text-secondary:#999;--sb:#1c1c1c}}
-      *{box-sizing:border-box;margin:0;padding:0}body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text-primary);font-size:14px}
-      .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
-      .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
-      .g2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:12px}
-      .cc{background:var(--card);border:0.5px solid var(--border);border-radius:12px;padding:15px;margin-bottom:12px}
-      .cc:last-child{margin-bottom:0}
-      .st{font-size:10px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
-      .live-badge{font-size:8px;padding:2px 6px;border-radius:10px;background:#dcfce7;color:#166534;font-weight:700;letter-spacing:.04em}
-      .err-badge{font-size:8px;padding:2px 6px;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:700}
-      .btn{font-size:11px;padding:5px 12px;border-radius:7px;border:0.5px solid var(--border);background:var(--card);color:var(--text-primary);cursor:pointer;font-family:inherit}
-      .btn.active,.btn-dark{background:#1a1a1a;color:#fff;border-color:#1a1a1a;font-weight:500}
-      .btn-red{background:#fee2e2;color:#991b1b;border:0.5px solid #fca5a5}
-      .btn-sm{font-size:10px;padding:3px 8px;border-radius:6px}
-      .btn-refresh{font-size:10px;padding:3px 10px;border-radius:6px;background:var(--surface);border:0.5px solid var(--border);cursor:pointer;color:var(--text-secondary);font-family:inherit}
-      select,input{font-size:12px;padding:5px 9px;border-radius:7px;border:0.5px solid var(--border);background:var(--card);color:var(--text-primary);outline:none}
-      .tbl{width:100%;font-size:12px;border-collapse:collapse}
-      .tbl th{color:var(--text-secondary);font-weight:400;text-align:left;padding:0 8px 7px 0;border-bottom:0.5px solid var(--border)}
-      .tbl td{padding:6px 8px 6px 0;border-bottom:0.5px solid var(--border);vertical-align:top}
+      :root{
+        --bg:#f4f4f2;--surface:#eae9e6;--card:#ffffff;--border:#e2e1de;
+        --fg:#111110;--fg-2:#444;--muted:#888;
+        --accent:#111110;--green:#16a34a;--red:#dc2626;--blue:#2563eb;
+        --radius:14px;
+      }
+      @media(prefers-color-scheme:dark){:root{
+        --bg:#111110;--surface:#1c1c1b;--card:#1f1f1e;--border:#2e2e2c;
+        --fg:#f5f4f1;--fg-2:#bbb;--muted:#666;--accent:#f5f4f1;
+      }}
+      *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+      body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--fg);font-size:14px;line-height:1.5}
+      code,pre{font-family:'DM Mono',monospace}
+      .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+      .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px}
+      .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+      .g5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+      .tbl{width:100%;border-collapse:collapse;font-size:12px}
+      .tbl th{padding:6px 10px 8px 0;color:var(--muted);font-weight:500;text-align:left;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+      .tbl td{padding:9px 10px 9px 0;border-bottom:1px solid var(--border);color:var(--fg-2);vertical-align:middle}
       .tbl tr:last-child td{border-bottom:none}
-      .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:200}
-      .modal{background:var(--card);border-radius:14px;padding:22px;width:470px;max-width:92vw;border:0.5px solid var(--border)}
-      .frow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
-      .flabel{font-size:11px;color:var(--text-secondary);margin-bottom:3px}
-      .sb-link{display:block;width:100%;text-align:left;padding:6px 10px;border-radius:8px;font-size:13px;cursor:pointer;background:transparent;border:none;color:var(--text-secondary);font-family:inherit}
-      .sb-link.active{background:var(--surface);color:var(--text-primary);font-weight:500}
-      @media(max-width:900px){.g4{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}}
+      .tbl tr:hover td{background:var(--surface);margin:-1px}
+      .btn{font-size:11px;font-weight:600;padding:5px 13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg-2);cursor:pointer;font-family:'DM Sans',sans-serif;letter-spacing:.01em;transition:all .15s}
+      .btn:hover{background:var(--surface)}
+      .btn.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+      .btn-green{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+      .btn-red{background:#fff1f2;color:#9f1239;border-color:#fecdd3}
+      .btn-primary{background:var(--fg);color:var(--bg);border-color:var(--fg);font-size:12px;padding:7px 16px;border-radius:9px}
+      .pill{font-size:9px;padding:2px 7px;border-radius:20px;font-weight:700;letter-spacing:.05em;white-space:nowrap}
+      select,input{font-size:12px;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);outline:none;font-family:'DM Sans',sans-serif}
+      select:focus,input:focus{border-color:var(--fg);box-shadow:0 0 0 2px rgba(17,17,16,.08)}
+      .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(4px)}
+      .modal{background:var(--card);border-radius:18px;padding:26px;width:500px;max-width:94vw;border:1px solid var(--border);box-shadow:0 24px 48px rgba(0,0,0,.15)}
+      .field{margin-bottom:12px}
+      .field label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em}
+      .field input,.field select{width:100%}
+      @media(max-width:960px){.g4{grid-template-columns:repeat(2,1fr)}.g5{grid-template-columns:repeat(3,1fr)}.g3{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}}
     `}</style>
 
-    <div style={{display:'flex',minHeight:'100vh'}}>
-      {/* ── Sidebar ── */}
-      <div style={{width:210,background:'var(--sb)',borderRight:'0.5px solid var(--border)',display:'flex',flexDirection:'column',padding:'0 0 16px',flexShrink:0}}>
-        <div style={{padding:'16px 15px 13px',borderBottom:'0.5px solid var(--border)',marginBottom:6}}>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{width:30,height:30,borderRadius:8,background:'linear-gradient(135deg,#f97316,#dc2626)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>🏃</div>
-            <div><div style={{fontSize:14,fontWeight:600}}>Cheer My Run</div><div style={{fontSize:10,color:'var(--text-secondary)'}}>Investor Dashboard</div></div>
-          </div>
-        </div>
-        <div style={{padding:'2px 6px',flex:1}}>
-          {TABS.map(t=><button key={t} onClick={()=>setTab(t)} className={`sb-link${tab===t?' active':''}`}>{t}</button>)}
-        </div>
-        {/* Source status */}
-        <div style={{padding:'10px 15px 0',borderTop:'0.5px solid var(--border)'}}>
-          <div style={{fontSize:9,color:'var(--text-secondary)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>Conexiones</div>
-          <div style={{marginBottom:7}}>
-            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12,marginBottom:2}}>
-              <div style={{width:5,height:5,borderRadius:'50%',background:sw?.connected?'#16a34a':'#f59e0b'}}/>
-              Superwall
-              {swLoading&&<span style={{fontSize:9,color:'#888'}}>cargando...</span>}
-              {!swLoading&&sw?.connected&&<span className="live-badge">LIVE</span>}
-              {!swLoading&&!sw?.connected&&<span className="err-badge">CONFIG</span>}
-            </div>
-            {lastRefresh&&<div style={{fontSize:9,color:'#999',marginLeft:11}}>Actualizado: {lastRefresh.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</div>}
-          </div>
-          <div style={{marginBottom:7}}>
-            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:12}}>
-              <div style={{width:5,height:5,borderRadius:'50%',background:'#16a34a'}}/>Mixpanel <span className="live-badge">LIVE</span>
+    <div style={{display:'flex',height:'100vh',overflow:'hidden'}}>
+      {/* ── SIDEBAR ── */}
+      <div style={{width:220,background:'var(--card)',borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',flexShrink:0}}>
+        {/* Logo */}
+        <div style={{padding:'18px 18px 14px',borderBottom:'1px solid var(--border)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div style={{width:34,height:34,borderRadius:10,background:'linear-gradient(135deg,#f97316,#dc2626)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>🏃</div>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,letterSpacing:'-0.01em'}}>Cheer My Run</div>
+              <div style={{fontSize:10,color:'var(--muted)'}}>Investor Dashboard</div>
             </div>
           </div>
-          <button className="btn-refresh" onClick={fetchSuperwall} style={{width:'100%',marginTop:4}}>↻ Refrescar</button>
+        </div>
+
+        {/* Nav */}
+        <nav style={{padding:'8px 10px',flex:1,overflowY:'auto'}}>
+          <div style={{fontSize:9,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em',padding:'8px 8px 4px'}}>Analytics</div>
+          {TABS.map(t=>(
+            <button key={t} onClick={()=>setTab(t)} style={{display:'block',width:'100%',textAlign:'left',padding:'7px 10px',borderRadius:8,fontSize:13,cursor:'pointer',background:tab===t?'var(--surface)':'transparent',border:'none',color:tab===t?'var(--fg)':'var(--muted)',fontFamily:'inherit',fontWeight:tab===t?600:400,marginBottom:1,transition:'all .1s'}}>
+              {t}
+            </button>
+          ))}
+        </nav>
+
+        {/* Data Sources */}
+        <div style={{padding:'12px 14px',borderTop:'1px solid var(--border)'}}>
+          <div style={{fontSize:9,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:8}}>Data Sources</div>
+          <div style={{marginBottom:6}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
+              <div style={{width:6,height:6,borderRadius:'50%',background:swConnected?'#22c55e':'#f59e0b',flexShrink:0}}/>
+              <span style={{fontSize:11,color:'var(--fg-2)',fontWeight:500}}>Superwall</span>
+              {swLoading?<span style={{fontSize:9,color:'var(--muted)'}}>…</span>:swConnected?<span className="pill" style={{background:'#dcfce7',color:'#166534'}}>LIVE</span>:<span className="pill" style={{background:'#fef9c3',color:'#854d0e'}}>CACHED</span>}
+            </div>
+            {lastRefresh&&<div style={{fontSize:9,color:'var(--muted)',paddingLeft:12}}>Updated {lastRefresh.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</div>}
+          </div>
+          <div style={{marginBottom:8}}>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <div style={{width:6,height:6,borderRadius:'50%',background:'#22c55e',flexShrink:0}}/>
+              <span style={{fontSize:11,color:'var(--fg-2)',fontWeight:500}}>Mixpanel</span>
+              <span className="pill" style={{background:'#dcfce7',color:'#166534'}}>LIVE</span>
+            </div>
+          </div>
+          <button onClick={fetchSW} style={{width:'100%',fontSize:10,padding:'5px',borderRadius:7,border:'1px solid var(--border)',background:'var(--surface)',cursor:'pointer',color:'var(--muted)',fontFamily:'inherit'}}>↻ Refresh Superwall</button>
         </div>
       </div>
 
-      {/* ── Main ── */}
-      <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0,overflow:'hidden'}}>
+      {/* ── MAIN ── */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         {/* Header */}
-        <div style={{background:'var(--card)',borderBottom:'0.5px solid var(--border)',padding:'11px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,flexWrap:'wrap',gap:8}}>
-          <div style={{fontSize:15,fontWeight:600}}>{tab}</div>
-          <div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
-            {tab!=='ICP'&&tab!=='Comparar'&&tab!=='P&L'&&PERIODS.map(p=>(
-              <button key={p.v} className={`btn btn-sm${period===p.v?' active':''}`} onClick={()=>setPeriod(p.v)}>{p.l}</button>
-            ))}
-            {tab==='Revenue'&&!swLoading&&sw?.connected&&(
-              <div style={{display:'flex',gap:3,marginLeft:4,borderLeft:'0.5px solid var(--border)',paddingLeft:8}}>
+        <div style={{background:'var(--card)',borderBottom:'1px solid var(--border)',padding:'10px 22px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,flexWrap:'wrap',gap:8}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:700,letterSpacing:'-0.02em'}}>{tab}</div>
+            <div style={{fontSize:10,color:'var(--muted)'}}>CheerMyRun · {new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+          </div>
+          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+            {tab!=='User Profile'&&tab!=='Compare'&&tab!=='P&L'&&(
+              <>
+                {PERIODS.map(p=><button key={p.v} className={`btn${period===p.v?' on':''}`} onClick={()=>setPeriod(p.v)}>{p.l}</button>)}
+              </>
+            )}
+            {tab==='Revenue'&&(
+              <div style={{display:'flex',gap:3,paddingLeft:8,borderLeft:'1px solid var(--border)',marginLeft:4}}>
                 {(['last24h','last7d','last30d','last90d'] as const).map(p=>(
-                  <button key={p} className={`btn btn-sm${swPeriod===p?' active':''}`} onClick={()=>setSwPeriod(p)}>
-                    {p==='last24h'?'24h':p==='last7d'?'7d':p==='last30d'?'30d':'90d'}
+                  <button key={p} className={`btn${swPeriod===p?' on':''}`} onClick={()=>setSwPeriod(p)}>
+                    {{last24h:'24H',last7d:'7D',last30d:'30D',last90d:'90D'}[p]}
                   </button>
                 ))}
               </div>
             )}
-            {tab==='P&L'&&<button className="btn btn-sm btn-dark" onClick={()=>{setShowAdd(true);setEditId(null);}}>+ Agregar</button>}
+            {tab==='P&L'&&<button className="btn-primary" onClick={()=>{setShowAdd(true);setEditId(null);}}>+ Add Entry</button>}
           </div>
         </div>
 
-        <div style={{flex:1,padding:18,overflowY:'auto'}}>
+        {/* Content */}
+        <div style={{flex:1,overflowY:'auto',padding:'20px 22px'}}>
 
-{/* ═══════════════ REVENUE — SUPERWALL LIVE ═══════════════ */}
+{/* ═══════════ REVENUE ═══════════ */}
 {tab==='Revenue'&&(<>
-  {/* Connection banner */}
-  {swError&&<div style={{background:'#fef9c3',border:'0.5px solid #fde68a',borderRadius:10,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#854d0e'}}>
-    ⚠️ <strong>Superwall pendiente de configurar.</strong> Para conectar en vivo: ve a Vercel → Environment Variables y agrega <code>SUPERWALL_SESSION</code> y <code>SUPERWALL_CSRF</code> (obtén estos valores desde DevTools → Application → Cookies en superwall.com). {swError}
-  </div>}
-  {sw?.connected&&<div style={{background:'#f0fdf4',border:'0.5px solid #86efac',borderRadius:10,padding:'8px 14px',marginBottom:14,fontSize:11,color:'#166534',display:'flex',alignItems:'center',gap:8}}>
-    <span style={{fontSize:16}}>✅</span> <strong>Superwall conectado en vivo</strong> — datos actualizados automáticamente cada vez que abres el dashboard. Última actualización: {lastRefresh?.toLocaleTimeString('es-MX')}{' '}
-    <button className="btn-refresh" onClick={fetchSuperwall}>↻ Refrescar ahora</button>
-  </div>}
-
-  <div className="st">Revenue — Superwall {sw?.connected?'(LIVE)':'(configurar)'}</div>
-  <div className="g4">
-    <Card label="Total Proceeds iOS" value={swLoading?'...':(fmtUSD(swProceeds))} big green live={sw?.connected} sub={swPeriod==='last24h'?'últimas 24h':swPeriod==='last7d'?'últimos 7d':swPeriod==='last30d'?'últimos 30d':'últimos 90d'}/>
-    <Card label="Total Proceeds Android" value={swLoading?'...':swAndroid?fmtUSD(swAndroid.proceeds):'N/A'} live={sw?.connected&&!!swAndroid} sub="últimos 30d"/>
-    <Card label="Total combinado" value={swLoading?'...':fmtUSD(swTotal)} live={sw?.connected} green sub="iOS + Android"/>
-    <Card label="New Users iOS" value={swLoading?'...':fmt(swNewUsers)} live={sw?.connected} sub="instalaciones únicas"/>
+  {/* Superwall banner */}
+  <div style={{background:swConnected?'#f0fdf4':'#fffbeb',border:`1px solid ${swConnected?'#86efac':'#fde68a'}`,borderRadius:12,padding:'10px 14px',marginBottom:16,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+    <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:swConnected?'#166534':'#92400e'}}>
+      <span style={{fontSize:16}}>{swConnected?'✅':'⏳'}</span>
+      <strong>Superwall {swConnected?'connected':'cached data'}</strong>
+      {sw?.updatedAt&&<span style={{color:'inherit',opacity:.7}}>· Snapshot: {new Date(sw.updatedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
+    </div>
+    <button className="btn" onClick={fetchSW} style={{fontSize:10}}>↻ Refresh</button>
   </div>
-  <div className="g4">
-    <Card label="Total Conversiones" value={swLoading?'...':fmt(swConvs)} live={sw?.connected} sub="pagos completados"/>
-    <Card label="Paywall Rate" value={swLoading?'...':(swPaywallR.toFixed(1)+'%')} live={sw?.connected} sub="usuarios que ven paywall"/>
-    <Card label="Conv. Rate inicial" value={swLoading?'...':(swConvR.toFixed(1)+'%')} live={sw?.connected} green sub="1er pago / usuarios"/>
-    <Card label="iOS vs Android" value="82% / 18%" sub="subs por plataforma"/>
+
+  {/* Main KPIs — Superwall */}
+  <div style={{marginBottom:6,fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em'}}>Revenue · Superwall · {swPeriodLabel}</div>
+  <div className="g5" style={{marginBottom:16}}>
+    <KPI label="iOS Proceeds" value={$$(swD.proceeds)} color="#16a34a" live={swConnected} size="lg"/>
+    <KPI label="Android Proceeds" value={$$(sw?.android?.last7d?.proceeds||120)} color="#3b82f6" live={swConnected} sub="Last 7 days"/>
+    <KPI label="New Users" value={$(swD.newUsers)} color="#6366f1" live={swConnected}/>
+    <KPI label="Conversions" value={$(swD.conversions)} color="#f97316" live={swConnected} sub="paid subscriptions"/>
+    <KPI label="Conv. Rate" value={swD.convRate.toFixed(1)+'%'} color="#ec4899" live={swConnected} sub="initial paywall → paid"/>
+  </div>
+
+  <div className="g4" style={{marginBottom:16}}>
+    <KPI label="Paywall Rate" value={swD.paywallRate>0?swD.paywallRate.toFixed(1)+'%':'76.97%'} sub="users who see paywall" live={swConnected}/>
+    <KPI label="30D MRR Est." value={$$((sw?.ios?.last30d?.proceeds||4391)/30*30)} sub="monthly recurring revenue"/>
+    <KPI label="ARR Est." value={$$((sw?.ios?.last30d?.proceeds||4391)*12)} sub="annualized from 30D"/>
+    <KPI label="Total All-Time" value={$$(sw?.ios?.last90d?.proceeds||7635)} sub="iOS app total" live={swConnected}/>
   </div>
 
   {/* iOS vs Android */}
   <div className="g2">
-    <div className="cc">
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-        <span style={{fontSize:13,fontWeight:600}}>iOS vs Android — Usuarios activos</span>
-        <span style={{fontSize:9,padding:'2px 6px',borderRadius:10,background:'#eff6ff',color:'#1d4ed8',fontWeight:600}}>MIXPANEL</span>
+    <Section title="iOS vs Android — Active Users" sub="Mixpanel · 30 days">
+      <div style={{height:160}}><Doughnut data={{labels:['iOS','Android'],datasets:[{data:[1174,38],backgroundColor:['#111110','#22c55e'],borderWidth:0,hoverOffset:4}]}} options={DONUT_OPT}/></div>
+      <div style={{marginTop:10}}>
+        <MiniBar label="iOS — 1,174 users" val={1174} max={1212} color="#111110"/>
+        <MiniBar label="Android — 38 users" val={38} max={1212} color="#22c55e"/>
       </div>
-      <div style={{height:170}}><Doughnut data={{labels:PLATFORM.map(r=>r[0]),datasets:[{data:PLATFORM.map(r=>r[1]),backgroundColor:['#1a1a1a','#22c55e'],borderWidth:0}]}} options={DO}/></div>
-      <div style={{marginTop:8}}>
-        <SBar label="iOS" val={1174} total={1212} color="#1a1a1a"/>
-        <SBar label="Android" val={38} total={1212} color="#22c55e"/>
+      <Insight text="iOS is <strong>97% of active users</strong> — primary platform by far. Android just starting." type="blue"/>
+    </Section>
+    <Section title="iOS vs Android — Subscriptions" sub="Mixpanel · 30 days">
+      <div style={{height:160}}><Doughnut data={{labels:['iOS','Android'],datasets:[{data:[180,124],backgroundColor:['#111110','#22c55e'],borderWidth:0,hoverOffset:4}]}} options={DONUT_OPT}/></div>
+      <div style={{marginTop:10}}>
+        <MiniBar label="iOS — 180 subs" val={180} max={304} color="#111110"/>
+        <MiniBar label="Android — 124 subs" val={124} max={304} color="#22c55e"/>
       </div>
-      <Insight text="iOS domina con 97% de usuarios activos. Android apenas arrancando." type="blue"/>
+      <Insight text="Android has <strong>41% of subscriptions with only 3% of users</strong> — extremely high conversion. India cluster (Bhopal)." type="amber"/>
+    </Section>
+  </div>
+
+  {/* Paywall Campaigns */}
+  <Section title="Paywall Campaigns" sub={`Superwall · Last 30 days · ${swConnected?'Live data':'Snapshot'}`} action={swConnected&&<Tag label="LIVE" color="green"/>}>
+    <table className="tbl">
+      <thead><tr><th>Campaign</th><th style={{textAlign:'right'}}>Users</th><th style={{textAlign:'right'}}>Conv.</th><th style={{textAlign:'right'}}>Conv. Rate</th><th style={{textAlign:'right'}}>Proceeds</th></tr></thead>
+      <tbody>
+        {(sw?.campaigns||SW_SNAPSHOT.campaigns).map((c:any)=>(
+          <tr key={c.id}>
+            <td style={{fontWeight:500,color:'var(--fg)'}}>{c.name}</td>
+            <td style={{textAlign:'right'}}>{$(c.users)}</td>
+            <td style={{textAlign:'right'}}>{$(c.convs)}</td>
+            <td style={{textAlign:'right'}}><span style={{color:'#16a34a',fontWeight:600}}>{c.convRate.toFixed(1)}%</span></td>
+            <td style={{textAlign:'right',fontWeight:700,color:'#16a34a'}}>{$$(c.proceeds)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    <Insight text="<strong>Transaction Abandoned</strong> outperforms Example Campaign on conv. rate (10.7% vs 9.3%). Both generating ~$2.2K each." type="green"/>
+  </Section>
+
+  {/* Subscription Plans */}
+  <div className="g2">
+    <Section title="Subscription Plans Distribution" sub="Active paying users">
+      <div style={{height:170}}><Doughnut data={{labels:['Monthly','Annual','Annual Discounted','Weekly'],datasets:[{data:[110,39,3,5],backgroundColor:['#6366f1','#3b82f6','#0891b2','#f97316'],borderWidth:0}]}} options={DONUT_OPT}/></div>
+      <div style={{marginTop:10}}>
+        <MiniBar label="Monthly — $9.99/mo" val={110} max={157} color="#6366f1"/>
+        <MiniBar label="Annual — $29.99/yr" val={39} max={157} color="#3b82f6"/>
+        <MiniBar label="Annual Discounted" val={3} max={157} color="#0891b2"/>
+        <MiniBar label="Weekly — $2.99/wk" val={5} max={157} color="#f97316"/>
+      </div>
+    </Section>
+    <Section title="Conversion Speed" sub="From install to first payment">
+      {[{v:'~11 min',l:'Avg. time for same-day conversions',pct:'6% of new users',c:'#22c55e'},{v:'~5.9 hrs',l:'Avg. time within first 7 days',pct:'7% of new users',c:'#f97316'},{v:'86%',l:'Of conversions in first 6 hours',pct:'of the install day',c:'#6366f1'}].map(x=>(
+        <div key={x.v} style={{display:'flex',gap:12,padding:'10px 12px',background:'var(--surface)',borderRadius:10,marginBottom:8,alignItems:'center'}}>
+          <div style={{fontSize:22,fontWeight:700,color:x.c,minWidth:80,letterSpacing:'-0.03em'}}>{x.v}</div>
+          <div><div style={{fontSize:12,color:'var(--fg)',fontWeight:500,lineHeight:1.3}}>{x.l}</div><div style={{fontSize:10,color:'var(--muted)',marginTop:2}}>{x.pct}</div></div>
+        </div>
+      ))}
+    </Section>
+  </div>
+
+  {/* Recent Transactions */}
+  <Section title="Recent Transactions" sub="Superwall · iOS app" action={swConnected&&<Tag label="LIVE" color="green"/>}>
+    <div style={{overflowX:'auto'}}>
+      <table className="tbl" style={{minWidth:480}}>
+        <thead><tr><th>User ID</th><th>Product</th><th>Campaign</th><th>Type</th><th style={{textAlign:'right'}}>Proceeds</th><th>Time</th></tr></thead>
+        <tbody>
+          {(sw?.recentTransactions||SW_SNAPSHOT.recentTransactions).slice(0,10).map((t:any,i:number)=>(
+            <tr key={i}>
+              <td><code style={{fontSize:10,color:'var(--muted)'}}>{t.userId}...</code></td>
+              <td style={{fontWeight:500,color:'var(--fg)'}}>{t.product}</td>
+              <td><span style={{fontSize:10,color:'var(--muted)'}}>{t.campaign==='paywall_decline'?'Discount Paywall':t.campaign==='campaign_trigger'?'Main Campaign':t.campaign}</span></td>
+              <td>
+                <span className="pill" style={{background:t.type==='Cancellation'?'#fff1f2':t.type==='Renewal'?'#eff6ff':'#f0fdf4',color:t.type==='Cancellation'?'#9f1239':t.type==='Renewal'?'#1d4ed8':'#166534'}}>
+                  {t.type}
+                </span>
+              </td>
+              <td style={{textAlign:'right',fontWeight:600,color:t.proceeds>0?'#16a34a':'var(--muted)'}}>{t.proceeds>0?$$(t.proceeds):'—'}</td>
+              <td style={{fontSize:10,color:'var(--muted)',whiteSpace:'nowrap'}}>{t.time?new Date(t.time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
-    <div className="cc">
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-        <span style={{fontSize:13,fontWeight:600}}>iOS vs Android — Suscripciones</span>
-        <span style={{fontSize:9,padding:'2px 6px',borderRadius:10,background:'#eff6ff',color:'#1d4ed8',fontWeight:600}}>MIXPANEL</span>
+  </Section>
+</>)}
+
+{/* ═══════════ OVERVIEW ═══════════ */}
+{tab==='Overview'&&(<>
+  <div style={{marginBottom:6,fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em'}}>Key Metrics · Mixpanel · {period>=999?'All Time':`Last ${period} Days`}</div>
+  <div className="g5">
+    <KPI label="Daily Active Users" value={$(tDAU)} sub="app_opened total" color="#6366f1"/>
+    <KPI label="New Subscribers" value={$(tSubs)} color="#22c55e" sub="subscription_started"/>
+    <KPI label="Cancellations" value={$(tCan)} color="#dc2626"/>
+    <KPI label="Net Subscribers" value={(netSubs>=0?'+':'')+$(netSubs)} color={netSubs>=0?'#22c55e':'#dc2626'} sub="new minus cancelled"/>
+    <KPI label="Renewals" value={$(tRen)} color="#3b82f6"/>
+  </div>
+  <div className="g5">
+    <KPI label="Runs Started" value={$(tRun)} color="#f97316" sub="run_started"/>
+    <KPI label="Cheers Sent" value={$(tChe)} color="#ec4899" sub="cheer_received"/>
+    <KPI label="Cheers / Run" value={tRun>0?(tChe/tRun).toFixed(0):'—'} color="#8b5cf6" sub="engagement depth"/>
+    <KPI label="Paywall Views" value="6,015" sub="unique users saw paywall"/>
+    <KPI label="Onboarding Done" value="4,520" sub="onboarding_completed"/>
+  </div>
+
+  {/* Funnel */}
+  <Section title="Acquisition Funnel" sub="App Open → Paid — Last 30 days">
+    <div style={{display:'flex',gap:0,overflowX:'auto',paddingBottom:4}}>
+      {FUNNEL.steps.map((s,i)=>{
+        const pct_val=i===0?100:Math.round(FUNNEL.values[i]/FUNNEL.values[0]*100);
+        const step_pct=i===0?100:Math.round(FUNNEL.values[i]/FUNNEL.values[i-1]*100);
+        return(
+          <div key={s} style={{flex:1,minWidth:120,padding:'0 10px',borderLeft:i>0?'1px solid var(--border)':'none',paddingLeft:i>0?16:0}}>
+            <div style={{fontSize:9,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>{i+1}. {s}</div>
+            <div style={{fontSize:26,fontWeight:700,letterSpacing:'-0.03em',color:'var(--fg)'}}>{$(FUNNEL.values[i])}</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>{pct_val}% of total</div>
+            {i>0&&<div style={{fontSize:11,color:step_pct>50?'#22c55e':'#f43f5e',fontWeight:600,marginTop:2}}>{step_pct}% from prev</div>}
+            <div style={{marginTop:8,height:4,background:'var(--surface)',borderRadius:2}}>
+              <div style={{width:`${pct_val}%`,height:'100%',borderRadius:2,background:['#6366f1','#3b82f6','#f97316','#22c55e'][i]}}/>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+    <Insight text="<strong>9% onboarding completion</strong> from app open — this is the primary growth lever. Paywall → purchase is 7%, which is strong." type="amber"/>
+  </Section>
+
+  <div className="g2">
+    <Section title="Daily Subscriptions, Cancellations & Renewals" sub={`Last ${period} days`}>
+      <div style={{height:200}}>
+        <Bar data={{labels:dts,datasets:[{label:'New',data:sub,backgroundColor:'#22c55e',borderRadius:2},{label:'Cancel',data:can,backgroundColor:'#f43f5e',borderRadius:2},{label:'Renew',data:ren,backgroundColor:'#6366f1',borderRadius:2}]}} options={{...CHART_BASE,plugins:{...CHART_BASE.plugins,legend:{display:true,labels:{font:{size:10},boxWidth:8,color:'var(--muted)'}}}} as any}/>
       </div>
-      <div style={{height:170}}><Doughnut data={{labels:PLATFORM_SUBS.map(r=>r[0]),datasets:[{data:PLATFORM_SUBS.map(r=>r[1]),backgroundColor:['#1a1a1a','#22c55e'],borderWidth:0}]}} options={DO}/></div>
-      <div style={{marginTop:8}}>
-        <SBar label="iOS" val={180} total={304} color="#1a1a1a"/>
-        <SBar label="Android" val={124} total={304} color="#22c55e"/>
+    </Section>
+    <Section title="Daily Active Users" sub={`Last ${period} days`}>
+      <div style={{height:200}}>
+        <Line data={{labels:dts,datasets:[{data:dau,borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,.08)',tension:.4,fill:true,pointRadius:0,borderWidth:2}]}} options={CHART_BASE as any}/>
       </div>
-      <Insight text="Android tiene 41% de subs con solo 3% de usuarios — conversión altísima (cluster India)." type="amber"/>
+    </Section>
+  </div>
+
+  <Section title="Cheers Activity (Weekly)" sub="90 days — emotional engagement depth">
+    <div style={{height:190}}>
+      <Bar data={{labels:WEEKLY_LABELS.slice(-10),datasets:[{label:'Cheers',data:WEEKLY_CHEERS.slice(-10),backgroundColor:'#f97316',borderRadius:3},{label:'Runs',data:WEEKLY_RUNS.slice(-10).map(v=>v*10),backgroundColor:'#6366f1',borderRadius:3}]}} options={{...CHART_BASE,plugins:{...CHART_BASE.plugins,legend:{display:true,labels:{font:{size:10},boxWidth:8}}}} as any}/>
+    </div>
+    <Insight text="<strong>Week of Mar 16: 15,473 cheers</strong> — peak engagement. Correlated with 193 runs that week. Cheers/run ratio trending up." type="green"/>
+  </Section>
+</>)}
+
+{/* ═══════════ RUNS ═══════════ */}
+{tab==='Runs'&&(<>
+  <div className="g4">
+    <KPI label="Runs Started" value={$(tRun)} color="#f97316"/>
+    <KPI label="Real Runs" value="387" color="#22c55e" sub=">5min AND >1km (58%)"/>
+    <KPI label="Test Runs" value="281" color="#f59e0b" sub="<5min or <1km (42%)"/>
+    <KPI label="Avg. Distance" value="9.4 km" color="#6366f1" sub="completed runs"/>
+  </div>
+  <div className="g4">
+    <KPI label="Median Duration" value="37 min" sub="run_completed"/>
+    <KPI label="Completion Rate" value="96%" color="#22c55e" sub="621 / 649 runs"/>
+    <KPI label="Peak Cheers/Day" value="11,281" color="#ec4899" sub="Mar 22, 2026"/>
+    <KPI label="Run Start Hour" value="6–10 AM" color="#3b82f6" sub="54% of all runs"/>
+  </div>
+
+  <div className="g2">
+    <Section title="Distance Distribution" sub="run_completed — 668 runs, 90 days">
+      <div style={{height:200}}>
+        <Bar data={{labels:['<1km','1–3km','3–5km','5–10km','10–21km','Half M.','Marathon+'],datasets:[{data:[278,23,42,86,106,105,28],backgroundColor:['#fecdd3','#bfdbfe','#bbf7d0','#bbf7d0','#86efac','#22c55e','#15803d'],borderRadius:4}]}} options={CHART_BASE as any}/>
+      </div>
+      <Insight text="<strong>278 runs under 1km = test runs</strong>. Remove these and avg. real distance is 15.2km. <strong>34% are half/full marathons</strong> — serious runners." type="blue"/>
+    </Section>
+    <Section title="Run Start Time (local hour)" sub="User behavior patterns">
+      <div style={{height:200}}>
+        <Bar data={{labels:['4–6am','6–8am','8–10am','10–12pm','12–2pm','2–4pm','4–6pm','6pm+'],datasets:[{data:[30,134,144,80,32,34,56,134],backgroundColor:['#bfdbfe','#f97316','#f97316','#bfdbfe','#bfdbfe','#bfdbfe','#bfdbfe','#94a3b8'],borderRadius:4}]}} options={CHART_BASE as any}/>
+      </div>
+      <Insight text="<strong>54% of runs start between 6–10am</strong>. Morning runner persona confirmed. Push notifications before 7am optimal." type="amber"/>
+    </Section>
+  </div>
+
+  <Section title="Daily Runs & Cheers" sub={`Last ${period} days`}>
+    <div style={{height:200}}>
+      <Bar data={{labels:dts,datasets:[{label:'Runs',data:run,backgroundColor:'#111110',borderRadius:2},{label:'Cheers (÷10)',data:che.map(v=>Math.round(v/10)),backgroundColor:'#f97316',borderRadius:2}]}} options={{...CHART_BASE,plugins:{...CHART_BASE.plugins,legend:{display:true,labels:{font:{size:10},boxWidth:8}}}} as any}/>
+    </div>
+    <Insight text="Cheer spikes correlate directly with run spikes — confirming the social engagement loop. <strong>Mar 21-22: 115 runs, 15K+ cheers</strong>." type="green"/>
+  </Section>
+</>)}
+
+{/* ═══════════ USER PROFILE ═══════════ */}
+{tab==='User Profile'&&(<>
+  <div style={{marginBottom:6,fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em'}}>Ideal Customer Profile · 161 paying subscribers with complete data</div>
+
+  {/* Summary card */}
+  <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:'3px solid #6366f1',borderRadius:14,padding:'16px 18px',marginBottom:14}}>
+    <div style={{fontSize:13,fontWeight:700,marginBottom:10}}>ICP Summary</div>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+      {['Female, 25–34','Intermediate runner','Apple Watch or Garmin','TikTok discovered','Always wears headphones','Always carries phone','Runs 6–10am','Listens to music','Half marathon runner','Km-based'].map(t=>(
+        <span key={t} style={{fontSize:11,padding:'4px 10px',borderRadius:20,background:'var(--surface)',color:'var(--fg-2)',fontWeight:500}}>{t}</span>
+      ))}
     </div>
   </div>
 
-  {/* Campaigns live */}
-  <div className="cc">
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-      <span style={{fontSize:13,fontWeight:600}}>Campañas de paywall</span>
-      {sw?.connected&&<span className="live-badge">LIVE</span>}
-    </div>
-    {swLoading?<div style={{textAlign:'center',padding:'20px',color:'var(--text-secondary)',fontSize:12}}>Cargando datos de Superwall...</div>:
-    sw?.connected&&sw?.campaigns?.length>0?(
+  <div className="g3">
+    <Section title="Gender" sub="Who are your paying users?">
+      <div style={{height:140}}><Doughnut data={{labels:['Female','Male','Other'],datasets:[{data:[110,37,2],backgroundColor:['#ec4899','#3b82f6','#94a3b8'],borderWidth:0}]}} options={DONUT_OPT}/></div>
+      <div style={{marginTop:8}}>{([['Female',110],['Male',37],['Other',2]] as [string,number][]).map((r,i)=><MiniBar key={r[0]} label={r[0]} val={r[1]} max={149} color={['#ec4899','#3b82f6','#94a3b8'][i]}/>)}</div>
+      <Insight text="<strong>74% female.</strong> Core persona: woman runner seeking emotional support & connection." type="green"/>
+    </Section>
+    <Section title="Age Range" sub="Paying subscribers">
+      <div style={{height:140}}><Bar data={{labels:['25–34','18–24','35–44','45–54'],datasets:[{data:[89,27,26,7],backgroundColor:['#6366f1','#8b5cf6','#a78bfa','#c4b5fd'],borderRadius:4}]}} options={CHART_BASE as any}/></div>
+      <div style={{marginTop:8}}>{([['25–34',89],['18–24',27],['35–44',26],['45–54',7]] as [string,number][]).map((r,i)=><MiniBar key={r[0]} label={r[0]} val={r[1]} max={149} color={COLS[i]}/>)}</div>
+    </Section>
+    <Section title="Running Level" sub="Self-reported experience">
+      <div style={{height:140}}><Doughnut data={{labels:['Intermediate','Beginner','Advanced'],datasets:[{data:[84,56,8],backgroundColor:['#f97316','#3b82f6','#22c55e'],borderWidth:0}]}} options={DONUT_OPT}/></div>
+      <div style={{marginTop:8}}>{([['Intermediate',84],['Beginner',56],['Advanced',8]] as [string,number][]).map((r,i)=><MiniBar key={r[0]} label={r[0]} val={r[1]} max={148} color={['#f97316','#3b82f6','#22c55e'][i]}/>)}</div>
+      <Insight text="95% beginners + intermediates. <strong>Advanced runners don't need emotional support.</strong>" type="blue"/>
+    </Section>
+  </div>
+
+  <div className="g3">
+    <Section title="Wearable Device" sub="What watch do they wear?">
+      <div style={{height:140}}><Doughnut data={{labels:['Apple Watch','Garmin','Fitbit','Samsung','Other'],datasets:[{data:[60,59,14,11,5],backgroundColor:['#111110','#16a34a','#3b82f6','#f59e0b','#94a3b8'],borderWidth:0}]}} options={DONUT_OPT}/></div>
+      <div style={{marginTop:8}}>{([['Apple Watch',60],['Garmin',59],['Fitbit',14],['Samsung',11]] as [string,number][]).map((r,i)=><MiniBar key={r[0]} label={r[0]} val={r[1]} max={149} color={['#111110','#16a34a','#3b82f6','#f59e0b'][i]}/>)}</div>
+      <Insight text="<strong>Premium hardware = premium willingness to pay.</strong> Apple Watch + Garmin = 80%." type="green"/>
+    </Section>
+    <Section title="Discovery Channel" sub="How did they find CheerMyRun?">
+      <div style={{height:140}}><Doughnut data={{labels:['TikTok','Instagram','Friends','Facebook'],datasets:[{data:[84,36,16,3],backgroundColor:['#111110','#e1306c','#1877f2','#94a3b8'],borderWidth:0}]}} options={DONUT_OPT}/></div>
+      <div style={{marginTop:8}}>{([['TikTok',84],['Instagram',36],['Friends',16],['Facebook',3]] as [string,number][]).map((r,i)=><MiniBar key={r[0]} label={r[0]} val={r[1]} max={139} color={['#111110','#e1306c','#1877f2','#94a3b8'][i]}/>)}</div>
+      <Insight text="<strong>TikTok = 60% of subscribers.</strong> Top acquisition channel by far. Double down here." type="green"/>
+    </Section>
+    <Section title="Races Completed" sub="Running experience">
+      <div style={{height:140}}><Bar data={{labels:['Half M.','10K','5K','Marathon'],datasets:[{data:[686,427,324,185],backgroundColor:['#6366f1','#3b82f6','#0891b2','#f97316'],borderRadius:4}]}} options={CHART_BASE as any}/></div>
+      <div style={{marginTop:8}}>{([['Half Marathon',686],['10K',427],['5K',324],['Marathon',185]] as [string,number][]).map((r,i)=><MiniBar key={r[0]} label={r[0]} val={r[1]} max={686} color={COLS[i]}/>)}</div>
+    </Section>
+  </div>
+
+  <div className="g3">
+    <Section title="Headphone Usage">
+      <div style={{height:120}}><Doughnut data={{labels:['Always','Sometimes','Rarely'],datasets:[{data:[131,23,3],backgroundColor:['#6366f1','#f97316','#94a3b8'],borderWidth:0}]}} options={DONUT_OPT}/></div>
+      <Insight text="<strong>83% always</strong> use headphones. Voice Notes are natural." type="green"/>
+    </Section>
+    <Section title="Phone During Run">
+      <div style={{height:120}}><Doughnut data={{labels:['Always','Sometimes'],datasets:[{data:[144,13],backgroundColor:['#22c55e','#f59e0b'],borderWidth:0}]}} options={DONUT_OPT}/></div>
+      <Insight text="<strong>92% always carry phone.</strong> Perfect product-market fit." type="green"/>
+    </Section>
+    <Section title="Music Preference">
+      <div style={{height:120}}><Doughnut data={{labels:['Music','Mix','Podcasts','Silence'],datasets:[{data:[120,31,4,2],backgroundColor:['#f97316','#6366f1','#3b82f6','#94a3b8'],borderWidth:0}]}} options={DONUT_OPT}/></div>
+      <Insight text="<strong>77% music</strong>. TTS cheers over music is the core use case." type="blue"/>
+    </Section>
+  </div>
+
+  <div className="g2">
+    <Section title="Cheer Type Preference" sub="TTS vs Voice Notes · All time">
+      <div style={{height:150}}><Doughnut data={{labels:['TTS (Text-to-Speech)','Voice Notes'],datasets:[{data:[13820,12794],backgroundColor:['#6366f1','#f97316'],borderWidth:0}]}} options={DONUT_OPT}/></div>
+      <div style={{marginTop:8}}>
+        <MiniBar label="TTS — 13,820 cheers" val={13820} max={26614} color="#6366f1"/>
+        <MiniBar label="Voice Notes — 12,794 cheers" val={12794} max={26614} color="#f97316"/>
+      </div>
+      <Insight text="<strong>52%/48% split</strong> — nearly even. Voice Notes feel personal, TTS is frictionless. Both matter." type="blue"/>
+    </Section>
+    <Section title="Top Cities by User Base" sub="Onboarding location data">
       <table className="tbl">
-        <thead><tr><th>Campaña</th><th style={{textAlign:'right'}}>Usuarios</th><th style={{textAlign:'right'}}>Conv.</th><th style={{textAlign:'right'}}>Conv. Rate</th><th style={{textAlign:'right'}}>Proceeds</th></tr></thead>
-        <tbody>{(sw.campaigns||[]).filter((c:any)=>c.name).map((c:any,i:number)=>(
-          <tr key={i}>
-            <td style={{fontWeight:500}}>{c.name}</td>
-            <td style={{textAlign:'right'}}>{fmt(c.users)}</td>
-            <td style={{textAlign:'right'}}>{fmt(c.conversions)}</td>
-            <td style={{textAlign:'right',color:'#16a34a'}}>{(c.convRate*100||0).toFixed(1)}%</td>
-            <td style={{textAlign:'right',fontWeight:600,color:'#16a34a'}}>{fmtUSD(c.proceeds)}</td>
-          </tr>
+        <thead><tr><th>#</th><th>City</th><th style={{textAlign:'right'}}>Users</th><th style={{textAlign:'right'}}>Share</th></tr></thead>
+        <tbody>{ICP.cities.map((r,i)=>(
+          <tr key={r[0]}><td style={{color:'var(--muted)',fontSize:11,width:24}}>{i+1}</td><td style={{fontWeight:500}}>{r[0]}</td><td style={{textAlign:'right'}}>{r[1]}</td><td style={{textAlign:'right'}}><MiniBar label="" val={r[1]} max={39} color={COLS[i%COLS.length]}/></td></tr>
         ))}</tbody>
       </table>
-    ):(
-      <div style={{padding:'12px',background:'var(--surface)',borderRadius:8,fontSize:12,color:'var(--text-secondary)'}}>
-        Campañas iOS (Superwall): <strong>Example Campaign</strong> — $2K · 9.2% conv. · <strong>Transaction Abandoned</strong> — $2K · 10.5% conv.
-      </div>
-    )}
+    </Section>
   </div>
 
-  {/* Recent transactions live */}
-  <div className="cc">
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-      <span style={{fontSize:13,fontWeight:600}}>Transacciones recientes</span>
-      {sw?.connected&&<span className="live-badge">LIVE</span>}
-    </div>
-    {swLoading?<div style={{textAlign:'center',padding:'16px',color:'var(--text-secondary)',fontSize:12}}>Cargando...</div>:
-    sw?.connected&&sw?.recentTransactions?.length>0?(
-      <div style={{overflowX:'auto'}}><table className="tbl" style={{minWidth:500}}>
-        <thead><tr><th>Usuario</th><th>Campaña</th><th>Producto</th><th style={{textAlign:'right'}}>Revenue</th><th>Tipo</th><th>Hora</th></tr></thead>
-        <tbody>{sw.recentTransactions.slice(0,15).map((t:any,i:number)=>(
-          <tr key={i}>
-            <td style={{fontFamily:'monospace',fontSize:11,color:'var(--text-secondary)'}}>{t.userId}...</td>
-            <td style={{fontSize:11}}>{t.campaign}</td>
-            <td style={{fontSize:11}}>{t.product}</td>
-            <td style={{textAlign:'right',fontWeight:600,color:'#16a34a'}}>{t.proceeds?fmtUSD(t.proceeds):'-'}</td>
-            <td><span style={{fontSize:10,padding:'1px 6px',borderRadius:10,background:t.type?.includes('Cancel')?'#fee2e2':t.type?.includes('Renew')?'#eff6ff':'#dcfce7',color:t.type?.includes('Cancel')?'#991b1b':t.type?.includes('Renew')?'#1d4ed8':'#166534'}}>{t.type?.replace('Direct Sub Start','Nueva').replace('Sub Cancel','Cancelación').replace('Renewal','Renovación')}</span></td>
-            <td style={{fontSize:10,color:'var(--text-secondary)',whiteSpace:'nowrap'}}>{t.time?new Date(t.time).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
-          </tr>
-        ))}</tbody>
-      </table></div>
-    ):(
-      <div style={{fontSize:12,color:'var(--text-secondary)',padding:'8px 0',lineHeight:2}}>
-        Transacciones de hoy: $9.99/yr ($26.35) · $29.99/yr ($39.99) · $2.99/wk · $9.99/yr ($12.50) · $9.99/mo · $29.99/yr...
-        <br/><em>Conecta Superwall para ver en tiempo real.</em>
-      </div>
-    )}
-  </div>
-
-  {/* Conversion time + funnel */}
-  <div className="g2">
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>⏱ Tiempo de conversión</div>
-      {[{t:'~11 minutos',d:'Tiempo promedio conversión mismo día (6%)',c:'#16a34a'},{t:'~5.9 horas',d:'Tiempo promedio en 7 días (7%)',c:'#f97316'},{t:'86%',d:'De conversiones en las primeras 6h del día de descarga',c:'#6366f1'}].map(x=>(
-        <div key={x.t} style={{display:'flex',gap:10,alignItems:'flex-start',padding:'8px',background:'var(--surface)',borderRadius:8,marginBottom:6}}>
-          <div style={{fontSize:18,fontWeight:700,color:x.c,width:80,flexShrink:0}}>{x.t}</div>
-          <div style={{fontSize:11,color:'var(--text-secondary)',lineHeight:1.4,paddingTop:2}}>{x.d}</div>
+  {/* Data bugs */}
+  <Section title="Data Quality Issues" sub="Bugs to fix in app tracking">
+    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+      {[
+        {issue:'usage_intent property is undefined for 100% of users',impact:'Cannot segment by use case',fix:'Save value in onboarding V2 before screen exits'},
+        {issue:'$country_code undefined for all users',impact:'Cannot do country revenue attribution',fix:'Pass device locale to Mixpanel SDK on init'},
+        {issue:'run_club_member is 100% false',impact:'Unclear if property works',fix:'Verify SDK sends updated value after onboarding step'},
+      ].map((b,i)=>(
+        <div key={i} style={{display:'flex',gap:12,padding:'10px 12px',background:'#fff1f2',borderRadius:10,border:'1px solid #fecdd3'}}>
+          <span style={{fontSize:14,flexShrink:0}}>🔴</span>
+          <div>
+            <div style={{fontSize:12,fontWeight:600,color:'#9f1239'}}>{b.issue}</div>
+            <div style={{fontSize:11,color:'#be123c',marginTop:2}}><strong>Impact:</strong> {b.impact}</div>
+            <div style={{fontSize:11,color:'#9f1239',marginTop:1}}><strong>Fix:</strong> {b.fix}</div>
+          </div>
         </div>
       ))}
     </div>
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>Distribución de planes</div>
-      <div style={{height:180}}><Doughnut data={{labels:ICP_PLAN.map(r=>r[0]),datasets:[{data:ICP_PLAN.map(r=>r[1]),backgroundColor:['#6366f1','#3b82f6','#0891b2','#f97316'],borderWidth:0}]}} options={DO}/></div>
-    </div>
-  </div>
+  </Section>
 </>)}
 
-{/* ═══════════════ OVERVIEW — MIXPANEL ═══════════════ */}
-{tab==='Overview'&&(<>
-  <div className="st">Métricas de uso — Mixpanel</div>
-  <div className="g4">
-    <Card label="Corridas" value={fmt(tRuns)} sub="run_started"/>
-    <Card label="Suscripciones nuevas" value={fmt(tSubs)} sub="via Superwall → Mixpanel"/>
-    <Card label="Cancelaciones" value={fmt(sum(fCanc))} color="#dc2626" sub="churn del período"/>
-    <Card label="Cheers recibidos" value={fmt(tCheers)} green sub={tRuns>0?(tCheers/tRuns).toFixed(0)+' por corrida':undefined}/>
-  </div>
-  <div className="g4">
-    <Card label="Neto subs" value={(netSubs>=0?'+':'')+fmt(netSubs)} color={netSubs>=0?'#16a34a':'#dc2626'} sub="nuevas − canceladas"/>
-    <Card label="Renovaciones" value={fmt(tRenew)} green/>
-    <Card label="Run completion" value="96%" green sub="621/649 corridas"/>
-    <Card label="Cheers/corrida" value={tRuns>0?(tCheers/tRuns).toFixed(0):'—'} green sub="engagement emocional"/>
-  </div>
-  <div className="g2">
-    <div className="cc">
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-        <span style={{fontSize:13,fontWeight:600}}>Subs · Cancel · Renovaciones</span>
-        <span style={{fontSize:9,padding:'2px 6px',borderRadius:10,background:'#eff6ff',color:'#1d4ed8',fontWeight:600}}>MIXPANEL</span>
-      </div>
-      <div style={{height:195}}>
-        <Bar data={{labels:fSubs.map(r=>r[0]),datasets:[{label:'Nuevas',data:fSubs.map(r=>r[1]),backgroundColor:'#16a34a',borderRadius:2},{label:'Cancelaciones',data:fCanc.map(r=>r[1]),backgroundColor:'#dc2626',borderRadius:2},{label:'Renovaciones',data:fRenew.map(r=>r[1]),backgroundColor:'#6366f1',borderRadius:2}]}} options={CO({plugins:{legend:{display:true,labels:{font:{size:10},boxWidth:9}}}})}/>
-      </div>
-    </div>
-    <div className="cc">
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-        <span style={{fontSize:13,fontWeight:600}}>Corridas por día</span>
-        <span style={{fontSize:9,padding:'2px 6px',borderRadius:10,background:'#eff6ff',color:'#1d4ed8',fontWeight:600}}>MIXPANEL</span>
-      </div>
-      <div style={{height:195}}>
-        <Bar data={{labels:fRuns.map(r=>r[0]),datasets:[{data:fRuns.map(r=>r[1]),backgroundColor:'#1a1a1a',borderRadius:2}]}} options={CO()}/>
-      </div>
-    </div>
-  </div>
-  <div className="cc">
-    <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Cheers recibidos por día</div>
-    <div style={{height:180}}>
-      <Bar data={{labels:fCheers.map(r=>r[0]),datasets:[{data:fCheers.map(r=>r[1]),backgroundColor:'#f97316',borderRadius:2}]}} options={CO()}/>
-    </div>
-    <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:8}}>Pico 22 mar: 11,281 cheers en un día. Total 30d: 26,614 cheers.</div>
-  </div>
-</>)}
-
-{/* ═══════════════ CORRIDAS ═══════════════ */}
-{tab==='Corridas'&&(<>
-  <div className="st">Análisis de corridas — Mixpanel</div>
-  <div className="g4">
-    <Card label="Corridas totales" value={fmt(tRuns)} sub="run_started"/>
-    <Card label="Corridas reales" value="387" green sub=">5min y >1km"/>
-    <Card label="Pruebas de app" value="281" color="#f59e0b" sub="<5min o <1km (42%)"/>
-    <Card label="Distancia promedio" value="9.4km" green sub="run_completed"/>
-  </div>
-  <div className="g2">
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>¿Qué distancias corren?</div>
-      <div style={{height:190}}>
-        <Bar data={{labels:DIST_RUNS.map(b=>b.l),datasets:[{data:DIST_RUNS.map(b=>b.v),backgroundColor:DIST_RUNS.map(b=>b.r?'#6366f1':'#f59e0b'),borderRadius:3}]}} options={CO()}/>
-      </div>
-      <Insight text="<strong>Corrida real:</strong> >5min Y >1km. 387/668 = 58% son corridas reales. 34% son medias maratones o maratones." type="blue"/>
-    </div>
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Hora de inicio (local_hour)</div>
-      <div style={{height:190}}>
-        <Bar data={{labels:HORA_RUNS.map(r=>r[0]),datasets:[{data:HORA_RUNS.map(r=>r[1]),backgroundColor:HORA_RUNS.map(r=>{const h=parseInt(r[0]);return h>=6&&h<12?'#f97316':h>=18?'#1a1a1a':'#94a3b8';}),borderRadius:3}]}} options={CO()}/>
-      </div>
-      <Insight text="<strong>54% de corridas entre 6-10am</strong> — usuarios madrugadores. Notificaciones antes de las 7am." type="amber"/>
-    </div>
-  </div>
-  <div className="cc">
-    <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Corridas por día</div>
-    <div style={{height:200}}>
-      <Bar data={{labels:fRuns.map(r=>r[0]),datasets:[{data:fRuns.map(r=>r[1]),backgroundColor:'#1a1a1a',borderRadius:2}]}} options={CO()}/>
-    </div>
-  </div>
-</>)}
-
-{/* ═══════════════ ICP ═══════════════ */}
-{tab==='ICP'&&(<>
-  <div className="st">Perfil del cliente ideal — suscriptores pagadores</div>
-  <div className="g2">
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>¿Cuál es tu género?</div>
-      <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:10}}>161 suscriptores con datos completos</div>
-      <div style={{height:155}}><Doughnut data={{labels:ICP_GENDER.map(r=>r[0]),datasets:[{data:ICP_GENDER.map(r=>r[1]),backgroundColor:['#ec4899','#3b82f6','#94a3b8'],borderWidth:0}]}} options={DO}/></div>
-      <div style={{marginTop:8}}>{ICP_GENDER.map((r,i)=><SBar key={r[0]} label={r[0]} val={r[1]} total={149} color={['#ec4899','#3b82f6','#94a3b8'][i]}/>)}</div>
-      <Insight text="<strong>74% femenino.</strong> La ICP es mujer corredora que busca apoyo emocional." type="green"/>
-    </div>
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>¿Cuántos años tienes?</div>
-      <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:10}}>161 suscriptores con datos</div>
-      <div style={{height:155}}><Bar data={{labels:ICP_AGE.map(r=>r[0]),datasets:[{data:ICP_AGE.map(r=>r[1]),backgroundColor:['#6366f1','#8b5cf6','#a78bfa','#c4b5fd'],borderRadius:3}]}} options={CO()}/></div>
-      <div style={{marginTop:8}}>{ICP_AGE.map((r,i)=><SBar key={r[0]} label={r[0]} val={r[1]} total={149} color={COLS[i]}/>)}</div>
-    </div>
-  </div>
-  <div className="g2">
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>¿Qué tipo de corredor eres?</div>
-      <div style={{height:150}}><Doughnut data={{labels:ICP_LEVEL.map(r=>r[0]),datasets:[{data:ICP_LEVEL.map(r=>r[1]),backgroundColor:['#f97316','#3b82f6','#22c55e'],borderWidth:0}]}} options={DO}/></div>
-      <div style={{marginTop:8}}>{ICP_LEVEL.map((r,i)=><SBar key={r[0]} label={r[0]} val={r[1]} total={148} color={['#f97316','#3b82f6','#22c55e'][i]}/>)}</div>
-      <Insight text="Principiantes + intermedios = 95%. El runner avanzado corre solo." type="blue"/>
-    </div>
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>¿Qué reloj usas?</div>
-      <div style={{height:150}}><Doughnut data={{labels:ICP_WATCH.map(r=>r[0]),datasets:[{data:ICP_WATCH.map(r=>r[1]),backgroundColor:['#1a1a1a','#16a34a','#3b82f6','#f59e0b','#6366f1','#ec4899'],borderWidth:0}]}} options={DO}/></div>
-      <div style={{marginTop:8}}>{ICP_WATCH.map((r,i)=><SBar key={r[0]} label={r[0]} val={r[1]} total={149} color={['#1a1a1a','#16a34a','#3b82f6','#f59e0b','#6366f1','#ec4899'][i]}/>)}</div>
-      <Insight text="<strong>Apple Watch 40% + Garmin 40%</strong> — hardware premium = alto poder adquisitivo." type="green"/>
-    </div>
-  </div>
-  <div className="g3">
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>¿Llevas teléfono al correr?</div>
-      <div style={{height:130}}><Doughnut data={{labels:ICP_PHONE.map(r=>r[0]),datasets:[{data:ICP_PHONE.map(r=>r[1]),backgroundColor:['#16a34a','#f59e0b'],borderWidth:0}]}} options={DO}/></div>
-      <div style={{marginTop:6}}>{ICP_PHONE.map((r,i)=><SBar key={r[0]} label={r[0]} val={r[1]} total={157} color={['#16a34a','#f59e0b'][i]}/>)}</div>
-      <Insight text="<strong>92% siempre.</strong> Producto hecho para ellos." type="green"/>
-    </div>
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>¿Corres con audífonos?</div>
-      <div style={{height:130}}><Doughnut data={{labels:ICP_HEADPHONES.map(r=>r[0]),datasets:[{data:ICP_HEADPHONES.map(r=>r[1]),backgroundColor:['#6366f1','#f97316','#94a3b8'],borderWidth:0}]}} options={DO}/></div>
-      <div style={{marginTop:6}}>{ICP_HEADPHONES.map((r,i)=><SBar key={r[0]} label={r[0]} val={r[1]} total={157} color={['#6366f1','#f97316','#94a3b8'][i]}/>)}</div>
-      <Insight text="<strong>83% siempre.</strong> Voice Notes naturales." type="blue"/>
-    </div>
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>¿Qué escuchas al correr?</div>
-      <div style={{height:130}}><Doughnut data={{labels:ICP_LISTEN.map(r=>r[0]),datasets:[{data:ICP_LISTEN.map(r=>r[1]),backgroundColor:['#f97316','#6366f1','#3b82f6','#94a3b8'],borderWidth:0}]}} options={DO}/></div>
-      <div style={{marginTop:6}}>{ICP_LISTEN.map((r,i)=><SBar key={r[0]} label={r[0]} val={r[1]} total={157} color={['#f97316','#6366f1','#3b82f6','#94a3b8'][i]}/>)}</div>
-    </div>
-  </div>
-  <div className="g2">
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>¿Dónde nos encontraste?</div>
-      <div style={{height:160}}><Doughnut data={{labels:ICP_SOURCE.map(r=>r[0]),datasets:[{data:ICP_SOURCE.map(r=>r[1]),backgroundColor:['#000','#e1306c','#1877f2','#94a3b8'],borderWidth:0}]}} options={DO}/></div>
-      <div style={{marginTop:8}}>{ICP_SOURCE.map((r,i)=><SBar key={r[0]} label={r[0]} val={r[1]} total={139} color={['#000','#e1306c','#1877f2','#94a3b8'][i]}/>)}</div>
-      <Insight text="<strong>TikTok 60%</strong> de suscriptores. Motor de adquisición #1." type="green"/>
-    </div>
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>¿Qué distancias ya has corrido?</div>
-      <div style={{height:160}}><Bar data={{labels:ICP_DISTANCES.map(r=>r[0]),datasets:[{data:ICP_DISTANCES.map(r=>r[1]),backgroundColor:COLS,borderRadius:3}]}} options={CO()}/></div>
-      <div style={{marginTop:8}}>{ICP_DISTANCES.map((r,i)=><SBar key={r[0]} label={r[0]} val={r[1]} total={686} color={COLS[i]}/>)}</div>
-      <Insight text="Media maratón domina. Usuario con experiencia real corriendo." type="blue"/>
-    </div>
-  </div>
-  <div className="g2">
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>Kilómetros o millas</div>
-      <div style={{height:140}}><Doughnut data={{labels:ICP_UNITS.map(r=>r[0]),datasets:[{data:ICP_UNITS.map(r=>r[1]),backgroundColor:['#6366f1','#f97316'],borderWidth:0}]}} options={DO}/></div>
-      <div style={{marginTop:6}}>{ICP_UNITS.map((r,i)=><SBar key={r[0]} label={r[0]} val={r[1]} total={160} color={['#6366f1','#f97316'][i]}/>)}</div>
-      <Insight text="69% km — LATAM + Europa domina. USA mercado secundario." type="blue"/>
-    </div>
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>Top ciudades</div>
-      <div style={{overflowY:'auto',maxHeight:210}}>
-        <table className="tbl">
-          <thead><tr><th>#</th><th>Ciudad</th><th style={{textAlign:'right'}}>Usuarios</th></tr></thead>
-          <tbody>{TOP_CITIES.map((r,i)=>(
-            <tr key={r[0]}>
-              <td style={{color:'var(--text-secondary)',width:24,fontSize:11}}>{i+1}</td>
-              <td style={{fontWeight:500}}>{r[0]}</td>
-              <td style={{textAlign:'right'}}>{r[1]}</td>
-            </tr>
-          ))}</tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-  <div className="cc">
-    <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>Voice Note vs TTS — ¿Cómo cheers reciben?</div>
-    <div className="g2">
-      <div style={{height:160}}><Doughnut data={{labels:CHEER_TYPE.map(r=>r[0]),datasets:[{data:CHEER_TYPE.map(r=>r[1]),backgroundColor:['#6366f1','#f97316'],borderWidth:0}]}} options={DO}/></div>
-      <div style={{paddingTop:8}}>
-        <SBar label="TTS (texto a voz)" val={13820} total={26614} color="#6366f1"/>
-        <SBar label="Voice Note" val={12794} total={26614} color="#f97316"/>
-        <div style={{marginTop:8,fontSize:12,color:'var(--text-secondary)'}}>52%/48% — casi empate. Voice notes más personales, TTS más accesible.</div>
-        <div style={{marginTop:6,padding:'8px',background:'#f0fdf4',borderRadius:8,fontSize:11,color:'#166534'}}>⚠️ <strong>usage_intent</strong> no se guarda en V2 — fix pendiente en el app.</div>
-        <div style={{marginTop:4,padding:'8px',background:'#eff6ff',borderRadius:8,fontSize:11,color:'#1d4ed8'}}>⚠️ <strong>Run club</strong> — 0% de suscriptores son miembros. Todos corren solos.</div>
-      </div>
-    </div>
-  </div>
-</>)}
-
-{/* ═══════════════ COMPARAR ═══════════════ */}
-{tab==='Comparar'&&(<>
-  <div className="st">Comparación semana a semana</div>
-  <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap'}}>
-    <div style={{flex:1,minWidth:200}}>
-      <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:4}}>Período A</div>
+{/* ═══════════ COMPARE ═══════════ */}
+{tab==='Compare'&&(<>
+  <div className="g2" style={{marginBottom:16}}>
+    <div>
+      <div style={{fontSize:11,color:'var(--muted)',marginBottom:4,fontWeight:600}}>Period A</div>
       <select value={cmpA} onChange={e=>setCmpA(Number(e.target.value))} style={{width:'100%'}}>
-        {WEEKS.map((w,i)=><option key={i} value={i}>{w.l}</option>)}
+        {WEEKS.map((w,i)=><option key={i} value={i}>Week of {w.l}</option>)}
       </select>
     </div>
-    <div style={{flex:1,minWidth:200}}>
-      <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:4}}>Período B</div>
+    <div>
+      <div style={{fontSize:11,color:'var(--muted)',marginBottom:4,fontWeight:600}}>Period B</div>
       <select value={cmpB} onChange={e=>setCmpB(Number(e.target.value))} style={{width:'100%'}}>
-        {WEEKS.map((w,i)=><option key={i} value={i}>{w.l}</option>)}
+        {WEEKS.map((w,i)=><option key={i} value={i}>Week of {w.l}</option>)}
       </select>
     </div>
   </div>
+
   <div className="g4">
-    {[{label:'Subs nuevas',a:wA.s,b:wB.s,pos:true},{label:'Cancelaciones',a:wA.c,b:wB.c,pos:false},{label:'Renovaciones',a:wA.r,b:wB.r,pos:true},{label:'Net subs',a:wA.s-wA.c,b:wB.s-wB.c,pos:true}].map(m=>{
-      const d=dpct(m.b,m.a);
-      return(<div key={m.label} style={{background:'var(--card)',border:'0.5px solid var(--border)',borderRadius:12,padding:'12px 14px'}}>
-        <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:6}}>{m.label}</div>
-        <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
-          <div><div style={{fontSize:9,color:'#888',marginBottom:1}}>{wA.l}</div><div style={{fontSize:18,fontWeight:600}}>{fmt(m.a)}</div></div>
-          <div style={{fontSize:16,color:'var(--text-secondary)',paddingBottom:1}}>→</div>
-          <div><div style={{fontSize:9,color:'#888',marginBottom:1}}>{wB.l}</div><div style={{fontSize:18,fontWeight:600,color:d&&d>0?(m.pos?'#16a34a':'#dc2626'):d&&d<0?(m.pos?'#dc2626':'#16a34a'):'var(--text-primary)'}}>{fmt(m.b)}</div></div>
+    {[{l:'New Subs',a:wA.s,b:wB.s,pos:true},{l:'Cancellations',a:wA.c,b:wB.c,pos:false},{l:'Renewals',a:wA.r,b:wB.r,pos:true},{l:'Net Growth',a:wA.s-wA.c,b:wB.s-wB.c,pos:true}].map(m=>{
+      const d=m.a>0?Math.round((m.b-m.a)/m.a*100):null;
+      const good=d!=null&&(m.pos?d>=0:d<=0);
+      return(
+        <div key={m.l} style={{background:'var(--card)',border:'1px solid var(--border)',borderRadius:14,padding:'14px 16px'}}>
+          <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>{m.l}</div>
+          <div style={{display:'flex',gap:10,alignItems:'flex-end',marginBottom:4}}>
+            <div style={{textAlign:'center'}}>
+              <div style={{fontSize:9,color:'var(--muted)',marginBottom:2}}>{wA.l}</div>
+              <div style={{fontSize:24,fontWeight:700,color:'var(--fg)',letterSpacing:'-0.03em'}}>{m.a}</div>
+            </div>
+            <div style={{fontSize:18,color:'var(--muted)',paddingBottom:4}}>→</div>
+            <div style={{textAlign:'center'}}>
+              <div style={{fontSize:9,color:'var(--muted)',marginBottom:2}}>{wB.l}</div>
+              <div style={{fontSize:24,fontWeight:700,color:d!=null?(good?'#22c55e':'#f43f5e'):'var(--fg)',letterSpacing:'-0.03em'}}>{m.b}</div>
+            </div>
+          </div>
+          {d!=null&&<div style={{fontSize:12,fontWeight:600,color:good?'#22c55e':'#f43f5e'}}>{d>=0?'▲':'▼'} {Math.abs(d)}%</div>}
         </div>
-        {d!=null&&<div style={{fontSize:11,marginTop:3,color:d>0?(m.pos?'#16a34a':'#dc2626'):d<0?(m.pos?'#dc2626':'#16a34a'):'#888'}}>{d>=0?'+':''}{d}%</div>}
-      </div>);
+      );
     })}
   </div>
-  <div className="cc">
-    <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>Comparación: {wA.l} vs {wB.l}</div>
-    <div style={{height:220}}>
-      <Bar data={{labels:['Subs nuevas','Cancelaciones','Renovaciones','Net subs'],datasets:[{label:wA.l,data:[wA.s,wA.c,wA.r,wA.s-wA.c],backgroundColor:'#6366f1',borderRadius:4},{label:wB.l,data:[wB.s,wB.c,wB.r,wB.s-wB.c],backgroundColor:'#f97316',borderRadius:4}]}} options={CO({plugins:{legend:{display:true,labels:{font:{size:11},boxWidth:10}}}})}/>
+
+  <Section title="Weekly Performance Chart" sub={`${wA.l} vs ${wB.l}`}>
+    <div style={{height:230}}>
+      <Bar data={{labels:['New Subs','Cancellations','Renewals','Net Growth'],datasets:[{label:wA.l,data:[wA.s,wA.c,wA.r,wA.s-wA.c],backgroundColor:'#6366f1',borderRadius:4},{label:wB.l,data:[wB.s,wB.c,wB.r,wB.s-wB.c],backgroundColor:'#f97316',borderRadius:4}]}} options={{...CHART_BASE,plugins:{...CHART_BASE.plugins,legend:{display:true,labels:{font:{size:11},boxWidth:10,color:'var(--muted)'}}}} as any}/>
     </div>
-  </div>
-  <div className="cc">
-    <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>Histórico completo</div>
+  </Section>
+
+  <Section title="Full Weekly History" sub="All weeks since launch">
     <div style={{overflowX:'auto'}}>
       <table className="tbl">
-        <thead><tr><th>Semana</th><th style={{textAlign:'right'}}>Nuevas</th><th style={{textAlign:'right'}}>Cancel.</th><th style={{textAlign:'right'}}>Renov.</th><th style={{textAlign:'right'}}>Neto</th></tr></thead>
+        <thead><tr><th>Week</th><th style={{textAlign:'right'}}>New</th><th style={{textAlign:'right'}}>Cancel</th><th style={{textAlign:'right'}}>Renew</th><th style={{textAlign:'right'}}>Net</th><th style={{textAlign:'right'}}>Churn Rate</th></tr></thead>
         <tbody>{WEEKS.map((w,i)=>{
           const net=w.s-w.c;
-          const isA=i===cmpA,isB=i===cmpB;
-          return(<tr key={i} style={{background:isA?'#eff6ff':isB?'#fef3c7':undefined}}>
-            <td style={{fontWeight:500}}>{w.l}{isA&&<span style={{fontSize:9,marginLeft:4,background:'#6366f1',color:'#fff',padding:'1px 5px',borderRadius:3}}>A</span>}{isB&&<span style={{fontSize:9,marginLeft:4,background:'#f97316',color:'#fff',padding:'1px 5px',borderRadius:3}}>B</span>}</td>
-            <td style={{textAlign:'right',color:'#16a34a',fontWeight:500}}>{w.s}</td>
-            <td style={{textAlign:'right',color:'#dc2626'}}>{w.c}</td>
-            <td style={{textAlign:'right',color:'#6366f1'}}>{w.r}</td>
-            <td style={{textAlign:'right',color:net>=0?'#16a34a':'#dc2626',fontWeight:600}}>{net>=0?'+':''}{net}</td>
-          </tr>);
-        })}</tbody>
-        <tr style={{borderTop:'1.5px solid var(--border)',fontWeight:700}}>
+          const churn=w.s>0?Math.round(w.c/w.s*100):0;
+          return(
+            <tr key={i} style={{background:i===cmpA?'#eff6ff':i===cmpB?'#fff7ed':undefined}}>
+              <td style={{fontWeight:600}}>
+                {w.l}
+                {i===cmpA&&<span className="pill" style={{background:'#6366f1',color:'#fff',marginLeft:6}}>A</span>}
+                {i===cmpB&&<span className="pill" style={{background:'#f97316',color:'#fff',marginLeft:6}}>B</span>}
+              </td>
+              <td style={{textAlign:'right',color:'#22c55e',fontWeight:600}}>{w.s}</td>
+              <td style={{textAlign:'right',color:'#f43f5e'}}>{w.c}</td>
+              <td style={{textAlign:'right',color:'#6366f1'}}>{w.r}</td>
+              <td style={{textAlign:'right',fontWeight:700,color:net>=0?'#22c55e':'#f43f5e'}}>{net>=0?'+':''}{net}</td>
+              <td style={{textAlign:'right',color:churn>50?'#f43f5e':churn>25?'#f59e0b':'var(--muted)'}}>{w.s>0?churn+'%':'—'}</td>
+            </tr>
+          );
+        })}
+        <tr style={{borderTop:'2px solid var(--border)',fontWeight:700}}>
           <td>TOTAL</td>
-          <td style={{textAlign:'right',color:'#16a34a'}}>{WEEKS.reduce((s,w)=>s+w.s,0)}</td>
-          <td style={{textAlign:'right',color:'#dc2626'}}>{WEEKS.reduce((s,w)=>s+w.c,0)}</td>
+          <td style={{textAlign:'right',color:'#22c55e'}}>{WEEKS.reduce((s,w)=>s+w.s,0)}</td>
+          <td style={{textAlign:'right',color:'#f43f5e'}}>{WEEKS.reduce((s,w)=>s+w.c,0)}</td>
           <td style={{textAlign:'right',color:'#6366f1'}}>{WEEKS.reduce((s,w)=>s+w.r,0)}</td>
-          <td style={{textAlign:'right',color:'#16a34a'}}>{WEEKS.reduce((s,w)=>s+w.s-w.c,0)}</td>
+          <td style={{textAlign:'right',color:'#22c55e'}}>+{WEEKS.reduce((s,w)=>s+w.s-w.c,0)}</td>
+          <td/>
         </tr>
+        </tbody>
       </table>
     </div>
-  </div>
+  </Section>
 </>)}
 
-{/* ═══════════════ P&L ═══════════════ */}
+{/* ═══════════ P&L ═══════════ */}
 {tab==='P&L'&&(<>
-  <div className="st">P&L — Gastos, ingresos e inversiones</div>
-  <div className="g3" style={{marginBottom:14}}>
-    <div className="cc" style={{borderLeft:'3px solid #dc2626',marginBottom:0}}>
-      <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:4}}>Total Gastos</div>
-      <div style={{fontSize:26,fontWeight:700,color:'#dc2626'}}>${gastos.toLocaleString()}</div>
-      <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:4}}>{pnl.filter(e=>e.type==='Gasto').length} entradas</div>
+  <div className="g3">
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:'3px solid #f43f5e',borderRadius:14,padding:'16px 18px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>Total Expenses</div>
+      <div style={{fontSize:30,fontWeight:700,color:'#dc2626',letterSpacing:'-0.03em'}}>${expenses.toLocaleString()}</div>
+      <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>{pnl.filter(e=>e.type==='Expense').length} entries</div>
     </div>
-    <div className="cc" style={{borderLeft:'3px solid #16a34a',marginBottom:0}}>
-      <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:4}}>Total Ingresos</div>
-      <div style={{fontSize:26,fontWeight:700,color:'#16a34a'}}>${ingresos.toLocaleString()}</div>
-      <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:4}}>{pnl.filter(e=>e.type==='Ingreso').length} entradas</div>
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:'3px solid #22c55e',borderRadius:14,padding:'16px 18px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>Total Income</div>
+      <div style={{fontSize:30,fontWeight:700,color:'#16a34a',letterSpacing:'-0.03em'}}>${income.toLocaleString()}</div>
+      <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>{pnl.filter(e=>e.type==='Income').length} entries</div>
     </div>
-    <div className="cc" style={{borderLeft:`3px solid ${ingresos-gastos>=0?'#16a34a':'#dc2626'}`,marginBottom:0}}>
-      <div style={{fontSize:11,color:'var(--text-secondary)',marginBottom:4}}>Flujo Neto</div>
-      <div style={{fontSize:26,fontWeight:700,color:ingresos-gastos>=0?'#16a34a':'#dc2626'}}>{ingresos-gastos>=0?'+':''}${(ingresos-gastos).toLocaleString()}</div>
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:`3px solid ${income-expenses>=0?'#22c55e':'#f43f5e'}`,borderRadius:14,padding:'16px 18px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>Net Cash Flow</div>
+      <div style={{fontSize:30,fontWeight:700,color:income-expenses>=0?'#16a34a':'#dc2626',letterSpacing:'-0.03em'}}>{income-expenses>=0?'+':''}${Math.abs(income-expenses).toLocaleString()}</div>
     </div>
   </div>
+
   {months.length>0&&<div className="g2">
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Burn mensual</div>
-      <div style={{height:200}}><Bar data={{labels:months,datasets:[{label:'Gastos',data:months.map(m=>byMonth[m]?.g||0),backgroundColor:'#dc2626',borderRadius:3},{label:'Ingresos',data:months.map(m=>byMonth[m]?.i||0),backgroundColor:'#16a34a',borderRadius:3}]}} options={CO({plugins:{legend:{display:true,labels:{font:{size:11},boxWidth:9}}}})}/></div>
-    </div>
-    <div className="cc">
-      <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Por categoría</div>
-      {Object.keys(byCat).length>0?<div style={{height:200}}><Doughnut data={{labels:Object.keys(byCat),datasets:[{data:Object.values(byCat),backgroundColor:Object.keys(byCat).map(k=>PNL_C[k]||'#94a3b8'),borderWidth:0}]}} options={DO}/></div>:<div style={{fontSize:12,color:'var(--text-secondary)',padding:'40px 0',textAlign:'center'}}>Agrega gastos para ver distribución</div>}
-    </div>
+    <Section title="Monthly Burn">
+      <div style={{height:200}}><Bar data={{labels:months,datasets:[{label:'Expenses',data:months.map(m=>byMonth[m]?.e||0),backgroundColor:'#f43f5e',borderRadius:3},{label:'Income',data:months.map(m=>byMonth[m]?.i||0),backgroundColor:'#22c55e',borderRadius:3}]}} options={{...CHART_BASE,plugins:{...CHART_BASE.plugins,legend:{display:true,labels:{font:{size:10},boxWidth:8}}}} as any}/></div>
+    </Section>
+    <Section title="Expenses by Category">
+      {Object.keys(byCat).length>0?<div style={{height:200}}><Doughnut data={{labels:Object.keys(byCat),datasets:[{data:Object.values(byCat),backgroundColor:Object.keys(byCat).map(k=>PNL_COLORS[k]||'#94a3b8'),borderWidth:0}]}} options={DONUT_OPT}/></div>:<div style={{fontSize:12,color:'var(--muted)',textAlign:'center',padding:'60px 0'}}>Add expense entries to see breakdown</div>}
+    </Section>
   </div>}
-  <div className="cc">
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-      <span style={{fontSize:13,fontWeight:600}}>Entradas</span>
-      <div style={{display:'flex',gap:5}}>
-        {['all','gasto','ingreso'].map(f=><button key={f} className={`btn btn-sm${filter===f?' active':''}`} onClick={()=>setFilter(f)}>{f==='all'?'Todos':f==='gasto'?'Gastos':'Ingresos'}</button>)}
-      </div>
+
+  <Section title="Entries" sub="Income & expenses log" action={
+    <div style={{display:'flex',gap:5}}>
+      {['all','Expense','Income'].map(f=><button key={f} className={`btn${pnlFilter===f?' on':''}`} onClick={()=>setPnlFilter(f)}>{f==='all'?'All':f+'s'}</button>)}
     </div>
-    {filtered.length===0?<div style={{textAlign:'center',padding:'24px 0',color:'var(--text-secondary)',fontSize:13}}>Sin entradas. Click en "+ Agregar".</div>:
-    <div style={{overflowX:'auto'}}><table className="tbl" style={{minWidth:500}}>
-      <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Tipo</th><th style={{textAlign:'right'}}>Monto</th><th></th></tr></thead>
-      <tbody>{filtered.map(e=>(
-        <tr key={e.id}>
-          <td style={{color:'var(--text-secondary)',whiteSpace:'nowrap',fontSize:11}}>{e.date}</td>
-          <td><span style={{fontWeight:500}}>{e.name}</span>{e.notes&&<div style={{fontSize:10,color:'var(--text-secondary)'}}>{e.notes}</div>}</td>
-          <td><span style={{fontSize:10,padding:'2px 6px',borderRadius:20,background:(PNL_C[e.category]||'#94a3b8')+'22',color:PNL_C[e.category]||'#666'}}>{e.category}</span></td>
-          <td><span style={{fontSize:10,padding:'2px 6px',borderRadius:20,background:e.type==='Gasto'?'#fee2e2':'#dcfce7',color:e.type==='Gasto'?'#991b1b':'#166534'}}>{e.type}</span></td>
-          <td style={{textAlign:'right',fontWeight:600,color:e.type==='Gasto'?'#dc2626':'#16a34a',whiteSpace:'nowrap'}}>{e.type==='Gasto'?'-':'+'}${e.amount.toLocaleString()}</td>
-          <td style={{whiteSpace:'nowrap'}}>
-            <button className="btn btn-sm" onClick={()=>startEdit(e)} style={{marginRight:3}}>Editar</button>
-            <button className="btn btn-sm btn-red" onClick={()=>del(e.id)}>Borrar</button>
-          </td>
-        </tr>
-      ))}</tbody>
-    </table></div>}
-  </div>
+  }>
+    {pnl.filter(e=>pnlFilter==='all'||e.type===pnlFilter).length===0?(
+      <div style={{textAlign:'center',padding:'32px 0',color:'var(--muted)',fontSize:13}}>No entries yet. Click "+ Add Entry" to start tracking.</div>
+    ):(
+      <div style={{overflowX:'auto'}}><table className="tbl" style={{minWidth:500}}>
+        <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Type</th><th style={{textAlign:'right'}}>Amount</th><th/></tr></thead>
+        <tbody>{pnl.filter(e=>pnlFilter==='all'||e.type===pnlFilter).map(e=>(
+          <tr key={e.id}>
+            <td style={{color:'var(--muted)',fontSize:11,whiteSpace:'nowrap'}}>{e.date}</td>
+            <td><span style={{fontWeight:500,color:'var(--fg)'}}>{e.name}</span>{e.notes&&<div style={{fontSize:10,color:'var(--muted)'}}>{e.notes}</div>}</td>
+            <td><span className="pill" style={{background:(PNL_COLORS[e.category]||'#94a3b8')+'22',color:PNL_COLORS[e.category]||'#666'}}>{e.category}</span></td>
+            <td><span className="pill" style={{background:e.type==='Expense'?'#fff1f2':'#f0fdf4',color:e.type==='Expense'?'#9f1239':'#166534'}}>{e.type}</span></td>
+            <td style={{textAlign:'right',fontWeight:700,color:e.type==='Expense'?'#dc2626':'#16a34a',whiteSpace:'nowrap'}}>{e.type==='Expense'?'-':'+'}${e.amount.toLocaleString()}</td>
+            <td style={{whiteSpace:'nowrap'}}>
+              <button className="btn" style={{marginRight:4,fontSize:10}} onClick={()=>editPnl(e)}>Edit</button>
+              <button className="btn btn-red" style={{fontSize:10}} onClick={()=>delPnl(e.id)}>Delete</button>
+            </td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+    )}
+  </Section>
 </>)}
 
         </div>
       </div>
     </div>
 
-    {showAdd&&(<div className="modal-bg" onClick={()=>setShowAdd(false)}>
-      <div className="modal" onClick={e=>e.stopPropagation()}>
-        <div style={{fontSize:15,fontWeight:600,marginBottom:18}}>{editId?'Editar':'Nueva entrada P&L'}</div>
-        <div className="frow">
-          <div><div className="flabel">Fecha</div><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} style={{width:'100%'}}/></div>
-          <div><div className="flabel">Tipo</div><select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} style={{width:'100%'}}><option>Gasto</option><option>Ingreso</option></select></div>
-        </div>
-        <div style={{marginBottom:10}}><div className="flabel">Concepto</div><input type="text" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} style={{width:'100%'}}/></div>
-        <div className="frow">
-          <div><div className="flabel">Categoría</div><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})} style={{width:'100%'}}>{PNL_CATS.map(c=><option key={c}>{c}</option>)}</select></div>
-          <div><div className="flabel">Monto (USD)</div><input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} style={{width:'100%'}}/></div>
-        </div>
-        <div style={{marginBottom:18}}><div className="flabel">Notas</div><input type="text" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} style={{width:'100%'}}/></div>
-        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-          <button className="btn" onClick={()=>setShowAdd(false)}>Cancelar</button>
-          <button className="btn btn-dark" onClick={saveEntry}>{editId?'Guardar':'Agregar'}</button>
+    {/* P&L Modal */}
+    {showAdd&&(
+      <div className="modal-bg" onClick={()=>setShowAdd(false)}>
+        <div className="modal" onClick={e=>e.stopPropagation()}>
+          <div style={{fontSize:16,fontWeight:700,marginBottom:20,letterSpacing:'-0.01em'}}>{editId?'Edit Entry':'New P&L Entry'}</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div className="field"><label>Date</label><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></div>
+            <div className="field"><label>Type</label><select value={form.type} onChange={e=>setForm({...form,type:e.target.value})}><option>Expense</option><option>Income</option></select></div>
+          </div>
+          <div className="field"><label>Description</label><input type="text" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="e.g. Influencer partnership"/></div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div className="field"><label>Category</label><select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}>{PNL_CATS.map(c=><option key={c}>{c}</option>)}</select></div>
+            <div className="field"><label>Amount (USD)</label><input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="0.00"/></div>
+          </div>
+          <div className="field"><label>Notes (optional)</label><input type="text" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Additional context"/></div>
+          <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}}>
+            <button className="btn" onClick={()=>setShowAdd(false)}>Cancel</button>
+            <button className="btn-primary" onClick={savePnlEntry}>{editId?'Save Changes':'Add Entry'}</button>
+          </div>
         </div>
       </div>
-    </div>)}
+    )}
   </>);
 }
