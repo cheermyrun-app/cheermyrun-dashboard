@@ -13,7 +13,7 @@ const SW_SNAPSHOT = {
     last30d: { proceeds: 4391.37, newUsers: 2358, conversions: 326, paywallRate: 76.97, convRate: 12.72 },
     last90d: { proceeds: 7635.92, newUsers: 4712, conversions: 592, paywallRate: 75.1,  convRate: 11.67 },
   },
-  android: { last7d: { proceeds: 120, newUsers: 0, conversions: 0 } },
+  android: null,
   campaigns: [
     { id:'43913', name:'Example Campaign',       users:1978, convs:184, convRate:9.3,  proceeds:2277.75 },
     { id:'49473', name:'Transaction Abandoned',  users:1329, convs:142, convRate:10.68, proceeds:2177.87 },
@@ -344,119 +344,233 @@ export default function Dashboard(){
         <div style={{flex:1,overflowY:'auto',padding:'20px 22px'}}>
 
 {/* ═══════════ REVENUE ═══════════ */}
-{tab==='Revenue'&&(<>
-  {/* Superwall banner */}
-  <div style={{background:swConnected?'#f0fdf4':'#fffbeb',border:`1px solid ${swConnected?'#86efac':'#fde68a'}`,borderRadius:12,padding:'10px 14px',marginBottom:16,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+{tab==='Revenue'&&(()=>{
+  // ── Business metrics calculations ──────────────────────────────────
+  const proceeds30d = (sw?.ios?.last30d?.proceeds || SW_SNAPSHOT.ios.last30d.proceeds);
+  const proceeds7d  = (sw?.ios?.last7d?.proceeds  || SW_SNAPSHOT.ios.last7d.proceeds);
+  const proceeds90d = (sw?.ios?.last90d?.proceeds || SW_SNAPSHOT.ios.last90d.proceeds);
+
+  // Subscriber health (Mixpanel 90d)
+  const totalNewSubs  = 336;   // subscription_started 90d
+  const totalCancels  = 147;   // Subscription Cancelled 90d
+  const totalRenewals = 85;    // Renewal 90d
+  const activeEst     = totalNewSubs - totalCancels; // ~189 net new (estimate)
+  // Plan split (from ICP data)
+  const planMonthly = 110, planAnnual = 39, planDiscount = 3, planWeekly = 5;
+  const totalActive = planMonthly + planAnnual + planDiscount + planWeekly; // 157 confirmed paying
+
+  // Monthly churn rate: avg cancels/week ÷ active base
+  const weeklyChurnArr = [38, 50, 50, 9]; // last 4 weeks
+  const avgWeeklyCancels = weeklyChurnArr.reduce((a,b)=>a+b,0) / weeklyChurnArr.length;
+  const monthlyChurnRate = (avgWeeklyCancels * 4.33 / totalActive); // ~0.94
+  const monthlyChurnPct  = Math.round(monthlyChurnRate * 100 * 10) / 10;
+
+  // Renewal forecast (next 30d)
+  const annualSubs = planAnnual + planDiscount; // 42 annual subscribers
+  const monthlyRenewalRev = (planMonthly * 9.99) + (planWeekly * 2.99 * 4.33);
+  const annualRenewalRev  = annualSubs * (29.99 / 12); // monthly portion of annual
+  const renewalForecast30d = Math.round((monthlyRenewalRev + annualRenewalRev) * 100) / 100;
+
+  // MRR calculation
+  const mrr = Math.round(((planMonthly * 9.99) + (planAnnual * 29.99/12) + (planDiscount * 9.99/12) + (planWeekly * 2.99 * 4.33)) * 100) / 100;
+  const arr  = Math.round(mrr * 12 * 100) / 100;
+
+  // LTV calculation
+  const avgRevenuePerUser = proceeds90d / totalNewSubs; // revenue per acquired user
+  const monthlyChurnForLTV = monthlyChurnRate > 0 ? monthlyChurnRate : 0.35;
+  const ltv = Math.round((avgRevenuePerUser / monthlyChurnForLTV) * 100) / 100;
+
+  // CAC — populated from P&L if expenses exist
+  const totalExpenses = pnl.filter(e=>e.type==='Expense').reduce((s,e)=>s+e.amount,0);
+  const mktExpenses   = pnl.filter(e=>e.type==='Expense'&&['Marketing','Influencer'].includes(e.category)).reduce((s,e)=>s+e.amount,0);
+  const cacBlended    = totalExpenses>0 ? Math.round(totalExpenses/totalNewSubs*100)/100 : null;
+  const cacMarketing  = mktExpenses>0   ? Math.round(mktExpenses/totalNewSubs*100)/100  : null;
+  const ltvCacRatio   = (cacBlended&&ltv>0) ? Math.round(ltv/cacBlended*10)/10 : null;
+
+  // Weekly cohort churn data for chart
+  const churnWeeks   = ['Mar 9','Mar 16','Mar 23','Mar 30'];
+  const churnData    = [Math.round(38/137*100), Math.round(50/57*100), Math.round(50/64*100), Math.round(9/33*100)];
+  const renewalData  = [17, 26, 39, 3];
+
+  return(<>
+  {/* Superwall status */}
+  <div style={{background:swConnected?'#f0fdf4':'#fffbeb',border:`1px solid ${swConnected?'#86efac':'#fde68a'}`,borderRadius:12,padding:'9px 14px',marginBottom:16,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
     <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:swConnected?'#166534':'#92400e'}}>
-      <span style={{fontSize:16}}>{swConnected?'✅':'⏳'}</span>
-      <strong>Superwall {swConnected?'connected':'cached data'}</strong>
-      {sw?.updatedAt&&<span style={{color:'inherit',opacity:.7}}>· Snapshot: {new Date(sw.updatedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
+      <span style={{fontSize:15}}>{swConnected?'✅':'⏳'}</span>
+      <strong>Superwall {swConnected?'connected · iOS only':'snapshot'}</strong>
+      {sw?.updatedAt&&<span style={{opacity:.7}}>· {new Date(sw.updatedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span>}
     </div>
     <button className="btn" onClick={fetchSW} style={{fontSize:10}}>↻ Refresh</button>
   </div>
 
-  {/* Main KPIs — Superwall */}
-  <div style={{marginBottom:6,fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em'}}>Revenue · Superwall · {swPeriodLabel}</div>
-  <div className="g5" style={{marginBottom:16}}>
-    <KPI label="iOS Proceeds" value={$$(swD.proceeds)} color="#16a34a" live={swConnected} size="lg"/>
-    <KPI label="Android Proceeds" value={$$(sw?.android?.last7d?.proceeds||120)} color="#3b82f6" live={swConnected} sub="Last 7 days"/>
-    <KPI label="New Users" value={$(swD.newUsers)} color="#6366f1" live={swConnected}/>
+  {/* ── SECTION 1: Revenue KPIs ── */}
+  <div style={{marginBottom:6,fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em'}}>Revenue · iOS · {swPeriodLabel}</div>
+  <div className="g4" style={{marginBottom:12}}>
+    <KPI label="Proceeds" value={$$(swD.proceeds)} color="#16a34a" live={swConnected} size="lg" sub={`${swPeriodLabel} net proceeds`}/>
+    <KPI label="New Users" value={$(swD.newUsers)} color="#6366f1" live={swConnected} sub="unique installs"/>
     <KPI label="Conversions" value={$(swD.conversions)} color="#f97316" live={swConnected} sub="paid subscriptions"/>
-    <KPI label="Conv. Rate" value={swD.convRate.toFixed(1)+'%'} color="#ec4899" live={swConnected} sub="initial paywall → paid"/>
+    <KPI label="Conv. Rate" value={swD.convRate.toFixed(1)+'%'} color="#ec4899" live={swConnected} sub="paywall → paid"/>
+  </div>
+  <div className="g4" style={{marginBottom:20}}>
+    <KPI label="MRR" value={$$( mrr)} color="#22c55e" sub="monthly recurring revenue"/>
+    <KPI label="ARR" value={$$(arr)} color="#22c55e" sub="annualized run rate"/>
+    <KPI label="All-Time Proceeds" value={$$(proceeds90d)} live={swConnected} sub="since launch (90d)"/>
+    <KPI label="Paywall Rate" value={swD.paywallRate>0?swD.paywallRate.toFixed(1)+'%':'76.97%'} live={swConnected} sub="users reaching paywall"/>
   </div>
 
-  <div className="g4" style={{marginBottom:16}}>
-    <KPI label="Paywall Rate" value={swD.paywallRate>0?swD.paywallRate.toFixed(1)+'%':'76.97%'} sub="users who see paywall" live={swConnected}/>
-    <KPI label="30D MRR Est." value={$$((sw?.ios?.last30d?.proceeds||4391)/30*30)} sub="monthly recurring revenue"/>
-    <KPI label="ARR Est." value={$$((sw?.ios?.last30d?.proceeds||4391)*12)} sub="annualized from 30D"/>
-    <KPI label="Total All-Time" value={$$(sw?.ios?.last90d?.proceeds||7635)} sub="iOS app total" live={swConnected}/>
-  </div>
-
-  {/* iOS vs Android */}
-  <div className="g2">
-    <Section title="iOS vs Android — Active Users" sub="Mixpanel · 30 days">
-      <div style={{height:160}}><Doughnut data={{labels:['iOS','Android'],datasets:[{data:[1174,38],backgroundColor:['#111110','#22c55e'],borderWidth:0,hoverOffset:4}]}} options={DONUT_OPT}/></div>
+  {/* ── SECTION 2: Subscriber Health ── */}
+  <div style={{marginBottom:6,fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em'}}>Subscriber Health</div>
+  <div className="g4" style={{marginBottom:20}}>
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:'3px solid #22c55e',borderRadius:14,padding:'14px 16px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Active Paying</div>
+      <div style={{fontSize:28,fontWeight:700,color:'#16a34a',letterSpacing:'-0.03em'}}>{totalActive}</div>
+      <div style={{fontSize:10,color:'var(--muted)',marginTop:4}}>confirmed subscribers</div>
       <div style={{marginTop:10}}>
-        <MiniBar label="iOS — 1,174 users" val={1174} max={1212} color="#111110"/>
-        <MiniBar label="Android — 38 users" val={38} max={1212} color="#22c55e"/>
+        <MiniBar label={`Monthly · ${planMonthly}`} val={planMonthly} max={totalActive} color="#6366f1"/>
+        <MiniBar label={`Annual · ${planAnnual}`} val={planAnnual} max={totalActive} color="#3b82f6"/>
+        <MiniBar label={`Weekly · ${planWeekly}`} val={planWeekly} max={totalActive} color="#f97316"/>
       </div>
-      <Insight text="iOS is <strong>97% of active users</strong> — primary platform by far. Android just starting." type="blue"/>
-    </Section>
-    <Section title="iOS vs Android — Subscriptions" sub="Mixpanel · 30 days">
-      <div style={{height:160}}><Doughnut data={{labels:['iOS','Android'],datasets:[{data:[180,124],backgroundColor:['#111110','#22c55e'],borderWidth:0,hoverOffset:4}]}} options={DONUT_OPT}/></div>
-      <div style={{marginTop:10}}>
-        <MiniBar label="iOS — 180 subs" val={180} max={304} color="#111110"/>
-        <MiniBar label="Android — 124 subs" val={124} max={304} color="#22c55e"/>
+    </div>
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:'3px solid #f43f5e',borderRadius:14,padding:'14px 16px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Monthly Churn Rate</div>
+      <div style={{fontSize:28,fontWeight:700,color:monthlyChurnPct>30?'#dc2626':monthlyChurnPct>15?'#f59e0b':'#16a34a',letterSpacing:'-0.03em'}}>{monthlyChurnPct}%</div>
+      <div style={{fontSize:10,color:'var(--muted)',marginTop:4}}>avg cancels / active base</div>
+      <div style={{marginTop:8,padding:'8px 10px',background:'#fff1f2',borderRadius:8,fontSize:11,color:'#9f1239'}}>
+        <strong>Weekly cancels:</strong> {weeklyChurnArr.join(' · ')} users<br/>
+        <strong>Avg/week:</strong> {avgWeeklyCancels.toFixed(0)} cancels
       </div>
-      <Insight text="Android has <strong>41% of subscriptions with only 3% of users</strong> — extremely high conversion. India cluster (Bhopal)." type="amber"/>
-    </Section>
-  </div>
-
-  {/* Paywall Campaigns */}
-  <Section title="Paywall Campaigns" sub={`Superwall · Last 30 days · ${swConnected?'Live data':'Snapshot'}`} action={swConnected&&<Tag label="LIVE" color="green"/>}>
-    <table className="tbl">
-      <thead><tr><th>Campaign</th><th style={{textAlign:'right'}}>Users</th><th style={{textAlign:'right'}}>Conv.</th><th style={{textAlign:'right'}}>Conv. Rate</th><th style={{textAlign:'right'}}>Proceeds</th></tr></thead>
-      <tbody>
-        {(sw?.campaigns||SW_SNAPSHOT.campaigns).map((c:any)=>(
-          <tr key={c.id}>
-            <td style={{fontWeight:500,color:'var(--fg)'}}>{c.name}</td>
-            <td style={{textAlign:'right'}}>{$(c.users)}</td>
-            <td style={{textAlign:'right'}}>{$(c.convs)}</td>
-            <td style={{textAlign:'right'}}><span style={{color:'#16a34a',fontWeight:600}}>{c.convRate.toFixed(1)}%</span></td>
-            <td style={{textAlign:'right',fontWeight:700,color:'#16a34a'}}>{$$(c.proceeds)}</td>
-          </tr>
+    </div>
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:'3px solid #6366f1',borderRadius:14,padding:'14px 16px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Renewal Forecast</div>
+      <div style={{fontSize:28,fontWeight:700,color:'#6366f1',letterSpacing:'-0.03em'}}>{$$(renewalForecast30d)}</div>
+      <div style={{fontSize:10,color:'var(--muted)',marginTop:4}}>expected next 30 days</div>
+      <div style={{marginTop:8,fontSize:11,color:'var(--fg-2)',lineHeight:1.5}}>
+        {planMonthly} monthly × $9.99<br/>
+        {annualSubs} annual (monthly portion)<br/>
+        {planWeekly} weekly × $2.99 × 4.33
+      </div>
+    </div>
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:'3px solid #f97316',borderRadius:14,padding:'14px 16px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Renewals (90d actual)</div>
+      <div style={{fontSize:28,fontWeight:700,color:'#f97316',letterSpacing:'-0.03em'}}>{totalRenewals}</div>
+      <div style={{fontSize:10,color:'var(--muted)',marginTop:4}}>successful renewals</div>
+      <div style={{marginTop:8}}>
+        {[{l:'Week Mar 9',v:17,c:'#bbf7d0'},{l:'Week Mar 16',v:26,c:'#86efac'},{l:'Week Mar 23',v:39,c:'#22c55e'},{l:'Week Mar 30',v:3,c:'#d1fae5'}].map(r=>(
+          <div key={r.l} style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--muted)',marginBottom:2}}>
+            <span>{r.l}</span><span style={{fontWeight:600,color:'var(--fg)'}}>{r.v}</span>
+          </div>
         ))}
-      </tbody>
-    </table>
-    <Insight text="<strong>Transaction Abandoned</strong> outperforms Example Campaign on conv. rate (10.7% vs 9.3%). Both generating ~$2.2K each." type="green"/>
-  </Section>
-
-  {/* Subscription Plans */}
-  <div className="g2">
-    <Section title="Subscription Plans Distribution" sub="Active paying users">
-      <div style={{height:170}}><Doughnut data={{labels:['Monthly','Annual','Annual Discounted','Weekly'],datasets:[{data:[110,39,3,5],backgroundColor:['#6366f1','#3b82f6','#0891b2','#f97316'],borderWidth:0}]}} options={DONUT_OPT}/></div>
-      <div style={{marginTop:10}}>
-        <MiniBar label="Monthly — $9.99/mo" val={110} max={157} color="#6366f1"/>
-        <MiniBar label="Annual — $29.99/yr" val={39} max={157} color="#3b82f6"/>
-        <MiniBar label="Annual Discounted" val={3} max={157} color="#0891b2"/>
-        <MiniBar label="Weekly — $2.99/wk" val={5} max={157} color="#f97316"/>
       </div>
+    </div>
+  </div>
+
+  {/* ── SECTION 3: Unit Economics ── */}
+  <div style={{marginBottom:6,fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.1em'}}>Unit Economics</div>
+  <div className="g4" style={{marginBottom:20}}>
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:'3px solid #8b5cf6',borderRadius:14,padding:'14px 16px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>LTV (estimated)</div>
+      <div style={{fontSize:28,fontWeight:700,color:'#8b5cf6',letterSpacing:'-0.03em'}}>{$$(ltv)}</div>
+      <div style={{fontSize:10,color:'var(--muted)',marginTop:4}}>avg revenue / churn rate</div>
+      <div style={{marginTop:6,fontSize:10,color:'var(--fg-2)'}}>Revenue per user: {$$(avgRevenuePerUser)}<br/>Monthly churn: {monthlyChurnPct}%</div>
+    </div>
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:'3px solid #0891b2',borderRadius:14,padding:'14px 16px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>CAC (blended)</div>
+      <div style={{fontSize:28,fontWeight:700,color:cacBlended?'#0891b2':'var(--muted)',letterSpacing:'-0.03em'}}>{cacBlended?$$(cacBlended):'—'}</div>
+      <div style={{fontSize:10,color:'var(--muted)',marginTop:4}}>{cacBlended?'total spend / new subs':'Add expenses in P&L tab'}</div>
+      {!cacBlended&&<div style={{marginTop:6,padding:'6px 8px',background:'#fffbeb',borderRadius:7,fontSize:10,color:'#92400e'}}>➡ Enter marketing spend in P&L to unlock CAC</div>}
+    </div>
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:'3px solid #14b8a6',borderRadius:14,padding:'14px 16px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>LTV:CAC Ratio</div>
+      <div style={{fontSize:28,fontWeight:700,color:ltvCacRatio&&ltvCacRatio>=3?'#16a34a':ltvCacRatio?'#f59e0b':'var(--muted)',letterSpacing:'-0.03em'}}>{ltvCacRatio?ltvCacRatio+'x':'—'}</div>
+      <div style={{fontSize:10,color:'var(--muted)',marginTop:4}}>target: &gt;3x is healthy</div>
+      {!ltvCacRatio&&<div style={{marginTop:6,fontSize:10,color:'var(--muted)'}}>Unlock by adding expenses</div>}
+    </div>
+    <div style={{background:'var(--card)',border:'1px solid var(--border)',borderTop:'3px solid #22c55e',borderRadius:14,padding:'14px 16px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>ARPU (30d)</div>
+      <div style={{fontSize:28,fontWeight:700,color:'#22c55e',letterSpacing:'-0.03em'}}>{$$(proceeds30d/totalActive)}</div>
+      <div style={{fontSize:10,color:'var(--muted)',marginTop:4}}>avg revenue per active user</div>
+      <div style={{marginTop:6,fontSize:10,color:'var(--fg-2)'}}>
+        ${(proceeds30d/swD.newUsers).toFixed(2)} per new install<br/>
+        ${mrr.toFixed(2)} total MRR
+      </div>
+    </div>
+  </div>
+
+  {/* ── SECTION 4: Churn & Retention Charts ── */}
+  <div className="g2">
+    <Section title="Weekly Churn Rate" sub="Cancellations as % of that week's new subs">
+      <div style={{height:180}}>
+        <Bar data={{labels:churnWeeks,datasets:[{label:'Churn %',data:churnData,backgroundColor:churnData.map(v=>v>50?'#f43f5e':v>30?'#f59e0b':'#22c55e'),borderRadius:4}]}} options={CHART_BASE as any}/>
+      </div>
+      <Insight text={`Weekly churn spiking — <strong>Week Mar 16: ${churnData[1]}%</strong>. Likely early users from the Mar 13-14 spike not retaining. Focus on Day-7 activation.`} type="amber"/>
+    </Section>
+    <Section title="Renewals Trending Up 📈" sub="Weekly renewal count">
+      <div style={{height:180}}>
+        <Bar data={{labels:churnWeeks,datasets:[{label:'Renewals',data:renewalData,backgroundColor:'#6366f1',borderRadius:4}]}} options={CHART_BASE as any}/>
+      </div>
+      <Insight text="Renewals grew <strong>17 → 26 → 39</strong> over 3 weeks — strong retention signal. Cohort from early March starting to renew." type="green"/>
+    </Section>
+  </div>
+
+  {/* ── SECTION 5: Campaigns & Conversion Speed ── */}
+  <div className="g2">
+    <Section title="Paywall Campaigns" sub={`Superwall · 30d · ${swConnected?'Live':'Snapshot'}`} action={swConnected&&<Tag label="LIVE" color="green"/>}>
+      <table className="tbl">
+        <thead><tr><th>Campaign</th><th style={{textAlign:'right'}}>Users</th><th style={{textAlign:'right'}}>Conv.</th><th style={{textAlign:'right'}}>Rate</th><th style={{textAlign:'right'}}>Proceeds</th></tr></thead>
+        <tbody>
+          {(sw?.campaigns||SW_SNAPSHOT.campaigns).map((c:any)=>(
+            <tr key={c.id}>
+              <td style={{fontWeight:500,color:'var(--fg)',fontSize:12}}>{c.name}</td>
+              <td style={{textAlign:'right'}}>{$(c.users)}</td>
+              <td style={{textAlign:'right'}}>{$(c.convs)}</td>
+              <td style={{textAlign:'right'}}><span style={{color:'#16a34a',fontWeight:600}}>{c.convRate.toFixed(1)}%</span></td>
+              <td style={{textAlign:'right',fontWeight:700,color:'#16a34a'}}>{$$(c.proceeds)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <Insight text="<strong>Transaction Abandoned</strong> converts at 10.7% vs 9.3%. Both generating ~$2.2K. Discount paywall is highly effective." type="green"/>
     </Section>
     <Section title="Conversion Speed" sub="From install to first payment">
-      {[{v:'~11 min',l:'Avg. time for same-day conversions',pct:'6% of new users',c:'#22c55e'},{v:'~5.9 hrs',l:'Avg. time within first 7 days',pct:'7% of new users',c:'#f97316'},{v:'86%',l:'Of conversions in first 6 hours',pct:'of the install day',c:'#6366f1'}].map(x=>(
+      {[{v:'~11 min',l:'Avg. time — same-day conversions',sub:'6% of new users convert same day',c:'#22c55e'},{v:'~5.9 hrs',l:'Avg. time — first 7 days',sub:'7% of users convert within a week',c:'#f97316'},{v:'86%',l:'Conversions in first 6 hours',sub:'of the install day — act fast or don\'t',c:'#6366f1'}].map(x=>(
         <div key={x.v} style={{display:'flex',gap:12,padding:'10px 12px',background:'var(--surface)',borderRadius:10,marginBottom:8,alignItems:'center'}}>
-          <div style={{fontSize:22,fontWeight:700,color:x.c,minWidth:80,letterSpacing:'-0.03em'}}>{x.v}</div>
-          <div><div style={{fontSize:12,color:'var(--fg)',fontWeight:500,lineHeight:1.3}}>{x.l}</div><div style={{fontSize:10,color:'var(--muted)',marginTop:2}}>{x.pct}</div></div>
+          <div style={{fontSize:20,fontWeight:700,color:x.c,minWidth:72,letterSpacing:'-0.03em'}}>{x.v}</div>
+          <div><div style={{fontSize:12,color:'var(--fg)',fontWeight:500,lineHeight:1.3}}>{x.l}</div><div style={{fontSize:10,color:'var(--muted)',marginTop:1}}>{x.sub}</div></div>
         </div>
       ))}
     </Section>
   </div>
 
-  {/* Recent Transactions */}
-  <Section title="Recent Transactions" sub="Superwall · iOS app" action={swConnected&&<Tag label="LIVE" color="green"/>}>
-    <div style={{overflowX:'auto'}}>
-      <table className="tbl" style={{minWidth:480}}>
-        <thead><tr><th>User ID</th><th>Product</th><th>Campaign</th><th>Type</th><th style={{textAlign:'right'}}>Proceeds</th><th>Time</th></tr></thead>
-        <tbody>
-          {(sw?.recentTransactions||SW_SNAPSHOT.recentTransactions).slice(0,10).map((t:any,i:number)=>(
-            <tr key={i}>
-              <td><code style={{fontSize:10,color:'var(--muted)'}}>{t.userId}...</code></td>
-              <td style={{fontWeight:500,color:'var(--fg)'}}>{t.product}</td>
-              <td><span style={{fontSize:10,color:'var(--muted)'}}>{t.campaign==='paywall_decline'?'Discount Paywall':t.campaign==='campaign_trigger'?'Main Campaign':t.campaign}</span></td>
-              <td>
-                <span className="pill" style={{background:t.type==='Cancellation'?'#fff1f2':t.type==='Renewal'?'#eff6ff':'#f0fdf4',color:t.type==='Cancellation'?'#9f1239':t.type==='Renewal'?'#1d4ed8':'#166534'}}>
-                  {t.type}
-                </span>
-              </td>
-              <td style={{textAlign:'right',fontWeight:600,color:t.proceeds>0?'#16a34a':'var(--muted)'}}>{t.proceeds>0?$$(t.proceeds):'—'}</td>
-              <td style={{fontSize:10,color:'var(--muted)',whiteSpace:'nowrap'}}>{t.time?new Date(t.time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):'-'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </Section>
-</>)}
+  {/* ── SECTION 6: Plan Mix & Recent Transactions ── */}
+  <div className="g2">
+    <Section title="Subscription Plan Mix" sub="Active paying subscribers">
+      <div style={{height:170}}><Doughnut data={{labels:['Monthly $9.99','Annual $29.99','Annual Disc.','Weekly $2.99'],datasets:[{data:[planMonthly,planAnnual,planDiscount,planWeekly],backgroundColor:['#6366f1','#3b82f6','#0891b2','#f97316'],borderWidth:0}]}} options={DONUT_OPT}/></div>
+      <div style={{marginTop:10}}>
+        <MiniBar label={`Monthly — ${planMonthly} users ($${(planMonthly*9.99).toFixed(0)}/mo)`} val={planMonthly} max={totalActive} color="#6366f1"/>
+        <MiniBar label={`Annual — ${planAnnual} users ($${(planAnnual*29.99/12).toFixed(0)}/mo)`} val={planAnnual} max={totalActive} color="#3b82f6"/>
+        <MiniBar label={`Weekly — ${planWeekly} users ($${(planWeekly*2.99*4.33).toFixed(0)}/mo)`} val={planWeekly} max={totalActive} color="#f97316"/>
+      </div>
+      <Insight text={`Monthly plan = ${Math.round(planMonthly/totalActive*100)}% of users but only ${Math.round(planMonthly*9.99/mrr*100)}% of MRR. Push annual plan — 3x better LTV.`} type="blue"/>
+    </Section>
+    <Section title="Recent Transactions" sub="Superwall · iOS" action={swConnected&&<Tag label="LIVE" color="green"/>}>
+      <div style={{overflowY:'auto',maxHeight:300}}>
+        <table className="tbl">
+          <thead><tr><th>User</th><th>Product</th><th>Type</th><th style={{textAlign:'right'}}>$</th></tr></thead>
+          <tbody>
+            {(sw?.recentTransactions||SW_SNAPSHOT.recentTransactions).slice(0,10).map((t:any,i:number)=>(
+              <tr key={i}>
+                <td><code style={{fontSize:10,color:'var(--muted)'}}>{t.userId}…</code></td>
+                <td style={{fontWeight:500,color:'var(--fg)',fontSize:11}}>{t.product}</td>
+                <td><span className="pill" style={{background:t.type==='Cancellation'?'#fff1f2':t.type==='Renewal'?'#eff6ff':'#f0fdf4',color:t.type==='Cancellation'?'#9f1239':t.type==='Renewal'?'#1d4ed8':'#166534'}}>{t.type}</span></td>
+                <td style={{textAlign:'right',fontWeight:600,color:t.proceeds>0?'#16a34a':'var(--muted)',fontSize:12}}>{t.proceeds>0?$$(t.proceeds):'—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
+  </div>
+</>);})()
 
 {/* ═══════════ OVERVIEW ═══════════ */}
 {tab==='Overview'&&(<>
