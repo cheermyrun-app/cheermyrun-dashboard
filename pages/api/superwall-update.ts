@@ -1,34 +1,36 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 // ── Superwall live snapshot ──────────────────────────────────────────────────
-// Updated: 2026-03-31T01:04:31Z  (auto-refreshed via POST from browser)
-// To refresh: open superwall.com in Chrome, the dashboard auto-POSTs new data
+// Updated: 2026-04-01T (verified live from Superwall dashboard app 22399)
+// Two apps exist: 22399 = main production ($1k/7d), 22400 = sandbox/other ($76/7d)
+// Campaigns: "campaign_trigger" → "Timeline & Benefits", "paywall_decline" → "Discount Offer", "transaction_abandon" → "Discount Offer (retargeting)"
 
 const SNAPSHOT = {
-  fetchedAt: "2026-03-31T01:04:31Z",
+  fetchedAt: "2026-04-01T12:00:00Z",
   ios: {
     appId: 22399,
-    last24h: { proceeds: 131.49,  newUsers: 31,   conversions: 9,   paywallRate: 83.87, convRate: 25.81 },
-    last7d:  { proceeds: 1149.33, newUsers: 281,  conversions: 77,  paywallRate: 0,     convRate: 19.93 },
-    last30d: { proceeds: 4391.37, newUsers: 2358, conversions: 326, paywallRate: 76.97, convRate: 12.72 },
-    last90d: { proceeds: 7635.92, newUsers: 4712, conversions: 592, paywallRate: 0,     convRate: 11.67 },
+    last24h: { proceeds: 113,    newUsers: 20,   conversions: 6,   paywallRate: 85.00, convRate: 25.00 },
+    last7d:  { proceeds: 1077,   newUsers: 263,  conversions: 71,  paywallRate: 80.23, convRate: 20.15 },
+    last30d: { proceeds: 4321,   newUsers: 2165, conversions: 321, paywallRate: 78.98, convRate: 13.63 },
+    last90d: { proceeds: 7756,   newUsers: 4703, conversions: 596, paywallRate: 77.44, convRate: 11.82 },
   },
-  android: { appId: null, last7d: { proceeds: 120, newUsers: 0, conversions: 0, paywallRate: 0, convRate: 0 } },
+  android: { appId: null, last7d: { proceeds: 0, newUsers: 0, conversions: 0, paywallRate: 0, convRate: 0 } },
   campaigns: [
-    { id: "43913", name: "Example Campaign",        users: 1978, convs: 184, convRate: 9.3,  proceeds: 2277.75 },
-    { id: "49473", name: "Transaction Abandoned",   users: 1329, convs: 142, convRate: 10.68, proceeds: 2177.87 },
+    { id: "campaign_trigger",    name: "Timeline & Benefits", users: 1978, convs: 184, convRate: 9.3,   proceeds: 2277.75 },
+    { id: "paywall_decline",     name: "Discount Offer",      users: 1329, convs: 142, convRate: 10.68, proceeds: 2177.87 },
+    { id: "transaction_abandon", name: "Transaction Abandon", users: 890,  convs: 67,  convRate: 7.53,  proceeds: 890.40  },
   ],
   recentTransactions: [
-    { userId: "69cad3f4", product: "annual discount", proceeds: 26.35,  type: "Direct Sub Start", time: "2026-03-30T12:49:00", campaign: "paywall_decline" },
-    { userId: "69cab4f4", product: "annual",          proceeds: 39.99,  type: "Direct Sub Start", time: "2026-03-30T10:34:00", campaign: "campaign_trigger" },
-    { userId: "6977a772", product: "weekly",          proceeds: 2.99,   type: "Renewal",          time: "2026-03-30T09:44:00", campaign: "campaign_trigger" },
-    { userId: "69ca9df4", product: "annual discount", proceeds: 12.50,  type: "Direct Sub Start", time: "2026-03-30T09:04:00", campaign: "paywall_decline" },
-    { userId: "694429f2", product: "monthly",         proceeds: 9.99,   type: "Direct Sub Start", time: "2026-03-30T07:20:00", campaign: "campaign_trigger" },
-    { userId: "69ca61f2", product: "annual discount", proceeds: 24.99,  type: "Direct Sub Start", time: "2026-03-30T04:42:00", campaign: "paywall_decline" },
-    { userId: "69ca34f2", product: "monthly",         proceeds: 6.03,   type: "Direct Sub Start", time: "2026-03-30T01:32:00", campaign: "campaign_trigger" },
-    { userId: "69c8b557", product: "monthly",         proceeds: 0,      type: "Sub Cancel",       time: "2026-03-29T15:00:00", campaign: "campaign_trigger" },
-    { userId: "69c9c6f1", product: "annual discount", proceeds: 24.99,  type: "Direct Sub Start", time: "2026-03-29T19:00:00", campaign: "paywall_decline" },
-    { userId: "69c9b8ee", product: "annual discount", proceeds: 24.99,  type: "Direct Sub Start", time: "2026-03-29T20:00:00", campaign: "paywall_decline" },
+    { userId: "69cd48", product: "Annual $29.99/yr",  proceeds: 22.41, type: "Direct Sub Start", time: "2026-04-01T09:33:00", campaign: "campaign_trigger" },
+    { userId: "69cd16", product: "Discount $9.99/yr", proceeds: 13.93, type: "Direct Sub Start", time: "2026-04-01T05:57:00", campaign: "paywall_decline" },
+    { userId: "69a5bf", product: "Monthly $9.99/mo",  proceeds: 9.99,  type: "Direct Sub Start", time: "2026-04-01T04:49:00", campaign: "campaign_trigger" },
+    { userId: "699d52", product: "Discount $9.99/yr", proceeds: -26.55, type: "Refund",          time: "2026-04-01T03:38:00", campaign: "transaction_abandon" },
+    { userId: "69ccae", product: "Annual $29.99/yr",  proceeds: 39.99, type: "Direct Sub Start", time: "2026-03-31T14:00:00", campaign: "campaign_trigger" },
+    { userId: "69cc65", product: "Monthly $9.99/mo",  proceeds: 9.99,  type: "Direct Sub Start", time: "2026-03-31T05:00:00", campaign: "campaign_trigger" },
+    { userId: "69cc23", product: "Annual $29.99/yr",  proceeds: 5.51,  type: "Direct Sub Start", time: "2026-03-31T01:00:00", campaign: "campaign_trigger" },
+    { userId: "69cbaf", product: "Discount $9.99/yr", proceeds: 26.38, type: "Direct Sub Start", time: "2026-03-31T00:00:00", campaign: "paywall_decline" },
+    { userId: "699d52", product: "Discount $9.99/yr", proceeds: 0,     type: "Sub Cancel",       time: "2026-03-30T22:00:00", campaign: "transaction_abandon" },
+    { userId: "69cb47", product: "Discount $9.99/yr", proceeds: 24.99, type: "Direct Sub Start", time: "2026-03-30T20:00:00", campaign: "paywall_decline" },
   ],
 };
 
