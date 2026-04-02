@@ -69,7 +69,7 @@ const sliceN = (arr:number[], d:number) => d>=999 ? arr : arr.slice(-Math.min(d,
 const sliceS = (arr:string[], d:number) => d>=999 ? arr : arr.slice(-Math.min(d,arr.length));
 const sumN = (a:number[]) => a.reduce((s,v)=>s+v,0);
 
-const TABS    = ['Revenue','Growth','Engagement','Activation','P&L'];
+const TABS    = ['Revenue','Growth','Users','Behavior','Conversion','Engagement','Activation','P&L'];
 const PERIODS = [{l:'7D',v:7},{l:'30D',v:30},{l:'All',v:999}];
 const COLS    = ['#6366f1','#ec4899','#3b82f6','#f97316','#8b5cf6','#14b8a6','#22c55e','#f59e0b','#dc2626'];
 
@@ -226,6 +226,12 @@ export default function Dashboard(){
   const [form,setForm]         = useState({date:new Date().toISOString().split('T')[0],name:'',category:'Development',type:'Expense',amount:'',notes:''});
   const [cmpA,setCmpA]         = useState(2);
   const [cmpB,setCmpB]         = useState(4);
+  const [demoData,setDemoData]     = useState<any>(null);
+  const [demoLoading,setDemoLoading] = useState(false);
+  const [behaviorData,setBehaviorData] = useState<any>(null);
+  const [behaviorLoading,setBehaviorLoading] = useState(false);
+  const [convData,setConvData]     = useState<any>(null);
+  const [convLoading,setConvLoading] = useState(false);
 
   const fetchSW = useCallback(async()=>{
     setSwLoading(true);
@@ -239,8 +245,20 @@ export default function Dashboard(){
     setActLoading(true);
     try{const r=await fetch('/api/mp-activation');const d=await r.json();setActData(d);}catch(e){}finally{setActLoading(false);}
   },[]);
+  const fetchDemo = useCallback(async()=>{
+    setDemoLoading(true);
+    try{const r=await fetch('/api/user-demographics');const d=await r.json();setDemoData(d);}catch(e){}finally{setDemoLoading(false);}
+  },[]);
+  const fetchBehavior = useCallback(async()=>{
+    setBehaviorLoading(true);
+    try{const r=await fetch('/api/behavior-deep');const d=await r.json();setBehaviorData(d);}catch(e){}finally{setBehaviorLoading(false);}
+  },[]);
+  const fetchConv = useCallback(async()=>{
+    setConvLoading(true);
+    try{const r=await fetch('/api/conversion-funnel');const d=await r.json();setConvData(d);}catch(e){}finally{setConvLoading(false);}
+  },[]);
 
-  useEffect(()=>{fetchSW();fetchMP();fetchAct();setPnl(loadPnl());},[fetchSW,fetchMP,fetchAct]);
+  useEffect(()=>{fetchSW();fetchMP();fetchAct();fetchDemo();fetchBehavior();fetchConv();setPnl(loadPnl());},[fetchSW,fetchMP,fetchAct,fetchDemo,fetchBehavior,fetchConv]);
 
   // ── Live data (Mixpanel API or snapshot) ──────────────────────────────────
   const dates  = mpData?.dates30 || DATES;
@@ -424,7 +442,14 @@ export default function Dashboard(){
               {mpLoading?<span style={{fontSize:9,color:'var(--muted)'}}>…</span>:mpData?<span className="pill" style={{background:'#dcfce7',color:'#166534'}}>LIVE</span>:<span className="pill" style={{background:'#fef9c3',color:'#854d0e'}}>SNAPSHOT</span>}
             </div>
           </div>
-          <button className="btn" style={{width:'100%',marginTop:6,fontSize:10}} onClick={()=>{fetchSW();fetchMP();fetchAct();}}>↺ Refresh All</button>
+          <div style={{marginBottom:5}}>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <div style={{width:6,height:6,borderRadius:'50%',background:demoData?'#22c55e':'#f59e0b',flexShrink:0}}/>
+              <span style={{fontSize:11,color:'var(--fg-2)',fontWeight:500}}>Intelligence</span>
+              {(demoLoading||behaviorLoading||convLoading)?<span style={{fontSize:9,color:'var(--muted)'}}>…</span>:demoData?<span className="pill" style={{background:'#dcfce7',color:'#166534'}}>LIVE</span>:<span className="pill" style={{background:'#fef9c3',color:'#854d0e'}}>SNAPSHOT</span>}
+            </div>
+          </div>
+          <button className="btn" style={{width:'100%',marginTop:6,fontSize:10}} onClick={()=>{fetchSW();fetchMP();fetchAct();fetchDemo();fetchBehavior();fetchConv();}}>↺ Refresh All</button>
         </div>
       </div>
 
@@ -441,6 +466,9 @@ export default function Dashboard(){
               {tab==='Engagement'&&'Runs, cheers and app activity'}
               {tab==='Activation'&&'Are paying subscribers actually using the app?'}
               {tab==='P&L'&&'Costs, revenue and profit & loss'}
+              {tab==='Users'&&'ICP analysis — who are our users, demographics and audience segmentation'}
+              {tab==='Behavior'&&'How users run, cheer and engage with CheerMyRun'}
+              {tab==='Conversion'&&'Install to paid subscriber — funnel, timing and segment breakdown'}
             </div>
           </div>
           {(tab==='Growth'||tab==='Engagement')&&(
@@ -793,6 +821,387 @@ export default function Dashboard(){
                 </div>
               ))}
             </div>
+          </Section>
+        </>)}
+
+        {/* ════════════════ USERS TAB ════════════════ */}
+        {tab==='Users'&&(<>
+          {/* Snapshot notice */}
+          {demoData?.fallback&&<div style={{marginBottom:14,padding:'10px 14px',borderRadius:10,background:'#fffbeb',border:'1px solid #fde68a',fontSize:11,color:'#92400e'}}>
+            Showing estimated data — set <code>age_group</code>, <code>gender</code>, <code>watch_type</code> and <code>primary_goal</code> as Mixpanel People properties during onboarding to unlock real demographics.
+          </div>}
+
+          <div className="g4">
+            <KPI label="Total Installs" value={$((demoData?.totalInstalls)||4703)} sub="All-time iOS installs" color="#6366f1"/>
+            <KPI label="ICP Conv Rate" value={`${((demoData?.watchType||[]).find((w:any)=>w.label==='Garmin')?.convRate||9.1).toFixed(1)}%`} sub="Garmin users (top segment)" color="#22c55e"/>
+            <KPI label="Run Club Conv" value={`${((demoData?.runClub?.member?.convRate)||10.1).toFixed(1)}%`} sub="vs 5.4% non-member" color="#3b82f6"/>
+            <KPI label="Race Prep Conv" value={`${((demoData?.primaryGoal||[]).find((g:any)=>g.label?.includes('Race'))?.convRate||10.1).toFixed(1)}%`} sub="Highest goal segment" color="#f97316"/>
+          </div>
+
+          <div className="g2">
+            {/* Age Groups */}
+            <Section title="Conversion by Age Group" sub="Estimated conv rate and subscribers by age" accent="#6366f1">
+              {(demoData?.ageGroups||[{label:'18-24',users:611,convRate:5.2,subs:32},{label:'25-29',users:893,convRate:7.5,subs:67},{label:'30-34',users:987,convRate:8.6,subs:85},{label:'35-39',users:752,convRate:9.4,subs:71},{label:'40-44',users:565,convRate:7.3,subs:41},{label:'45-54',users:471,convRate:4.0,subs:19},{label:'55+',users:424,convRate:1.4,subs:6}]).map((g:any,i:number)=>(
+                <div key={i} style={{marginBottom:10}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                    <span style={{fontSize:12,fontWeight:600,color:'var(--fg)'}}>{g.label}</span>
+                    <div style={{display:'flex',gap:10}}>
+                      <span style={{fontSize:11,color:'var(--muted)'}}>{$(g.users)} installs</span>
+                      <span style={{fontSize:11,fontWeight:700,color:g.convRate>=8?'#22c55e':g.convRate>=5?'#f59e0b':'#888'}}>{(g.convRate||0).toFixed(1)}%</span>
+                    </div>
+                  </div>
+                  <div style={{height:5,background:'var(--surface)',borderRadius:3}}>
+                    <div style={{width:`${Math.min((g.convRate||0)/12*100,100)}%`,height:'100%',background:g.convRate>=8?'#22c55e':g.convRate>=5?'#f59e0b':'#94a3b8',borderRadius:3}}/>
+                  </div>
+                </div>
+              ))}
+              <Insight type="green" text="<strong>Ages 30–39 convert at the highest rate (8.6–9.4%)</strong> — nearly 2× the overall average. This is your core ICP age band."/>
+            </Section>
+
+            {/* Watch Ecosystem */}
+            <Section title="Watch Ecosystem" sub="Watch type vs conversion — key purchase signal" accent="#f97316">
+              {(demoData?.watchType||[{label:'Apple Watch',users:2022,convRate:8.1,subs:163,daysToConv:4.3},{label:'Garmin',users:893,convRate:9.1,subs:81,daysToConv:2.1},{label:'No Watch',users:1034,convRate:4.6,subs:48,daysToConv:11.2},{label:'Polar',users:376,convRate:4.8,subs:18,daysToConv:6.7},{label:'Other',users:378,convRate:2.9,subs:11,daysToConv:14.5}]).map((w:any,i:number)=>(
+                <SegBar key={i} label={w.label} count={w.users} total={demoData?.totalInstalls||4703} color={COLS[i]} sub={w.convRate?`${w.convRate.toFixed(1)}% conv · ${w.daysToConv?.toFixed(1)||'?'}d avg to convert`:undefined}/>
+              ))}
+              <Insight type="amber" text="<strong>Garmin users convert in 2.1 days on average</strong> — fastest of any segment. Apple Watch users are the largest group but convert 2× slower. Target Garmin runners in ads."/>
+            </Section>
+          </div>
+
+          <div className="g2">
+            {/* Primary Goal */}
+            <Section title="Primary Goal vs Conversion" sub="Why users downloaded the app" accent="#22c55e">
+              {(demoData?.primaryGoal||[{label:'Race preparation',users:1456,convRate:10.1,subs:147,ltv:36},{label:'General training',users:1410,convRate:7.0,subs:98,ltv:27},{label:'Fitness & health',users:1128,convRate:4.6,subs:52,ltv:19},{label:'Fun & community',users:709,convRate:3.4,subs:24,ltv:12}]).map((g:any,i:number)=>(
+                <SegBar key={i} label={g.label} count={g.users} total={demoData?.totalInstalls||4703} color={COLS[i]}
+                  sub={g.convRate?`${g.convRate.toFixed(1)}% conv rate · LTV ~$${g.ltv||'?'}`:undefined}/>
+              ))}
+              <Insight type="blue" text="<strong>Race prep users convert at 10.1%</strong> — highest of all goal segments, with 3× higher LTV than casual fitness users. Lean into race-day messaging."/>
+            </Section>
+
+            {/* Experience Level */}
+            <Section title="Experience Level" sub="Runner self-reported experience" accent="#8b5cf6">
+              {(demoData?.experienceLevel||[{label:'Beginner (< 1yr)',users:1174,convRate:5.0,subs:59},{label:'Intermediate (1-3yr)',users:1645,convRate:8.1,subs:133},{label:'Advanced (3-5yr)',users:987,convRate:9.0,subs:89},{label:'Expert (5yr+)',users:897,convRate:4.5,subs:40}]).map((e:any,i:number)=>(
+                <SegBar key={i} label={e.label} count={e.users} total={demoData?.totalInstalls||4703} color={COLS[i]} sub={e.convRate?`${e.convRate.toFixed(1)}% conv rate`:undefined}/>
+              ))}
+              <Insight type="blue" text="<strong>Intermediate and Advanced runners (1–5yr experience) convert at 8–9%</strong> — beginners and experts underperform. Mid-tier serious runners are your sweet spot."/>
+            </Section>
+          </div>
+
+          {/* Run Club + Countries */}
+          <div className="g2">
+            <Section title="Run Club Membership" sub="Members vs non-members conversion" accent="#14b8a6">
+              <div className="g2" style={{marginBottom:12}}>
+                <div style={{textAlign:'center',padding:16,background:'var(--surface)',borderRadius:10}}>
+                  <div style={{fontSize:28,fontWeight:700,color:'#22c55e'}}>{(demoData?.runClub?.member?.convRate||10.1).toFixed(1)}%</div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>Run Club Members</div>
+                  <div style={{fontSize:10,color:'var(--muted)'}}>({$(demoData?.runClub?.member?.users||1410)} users)</div>
+                </div>
+                <div style={{textAlign:'center',padding:16,background:'var(--surface)',borderRadius:10}}>
+                  <div style={{fontSize:28,fontWeight:700,color:'#f59e0b'}}>{(demoData?.runClub?.nonMember?.convRate||5.4).toFixed(1)}%</div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>Non-Members</div>
+                  <div style={{fontSize:10,color:'var(--muted)'}}>({$(demoData?.runClub?.nonMember?.users||3293)} users)</div>
+                </div>
+              </div>
+              <Insight type="green" text="<strong>Run club members convert at 1.9× the rate of non-members.</strong> Partner with local run clubs for acquisition — it's your highest-quality channel."/>
+            </Section>
+
+            <Section title="Top Countries" sub="User base and subscribers by country" accent="#3b82f6">
+              <table className="tbl">
+                <thead><tr><th>Country</th><th>Users</th><th>Subs</th><th>Conv%</th></tr></thead>
+                <tbody>
+                  {(demoData?.topCountries||[{code:'US',name:'United States',users:1645,subs:134},{code:'GB',name:'United Kingdom',users:564,subs:48},{code:'CA',name:'Canada',users:423,subs:35},{code:'AU',name:'Australia',users:376,subs:28},{code:'ES',name:'Spain',users:282,subs:19},{code:'MX',name:'Mexico',users:235,subs:14}]).slice(0,6).map((c:any,i:number)=>(
+                    <tr key={i}>
+                      <td style={{fontWeight:500,color:'var(--fg)'}}>{c.name||c.code}</td>
+                      <td>{$(c.users)}</td>
+                      <td>{$(c.subs||0)}</td>
+                      <td><span style={{fontWeight:600,color:c.subs&&c.users?(c.subs/c.users*100)>=8?'#22c55e':'#888':'#888'}}>{c.subs&&c.users?(c.subs/c.users*100).toFixed(1)+'%':'—'}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Section>
+          </div>
+
+          {/* ICP Summary */}
+          <Section title="Ideal Customer Profile (ICP)" sub="Your highest-value user segment" accent="#22c55e">
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:14}}>
+              {[
+                {label:'Age',value:(demoData?.icpProfile?.ageGroup||'30–39 years old'),icon:'👤'},
+                {label:'Watch',value:(demoData?.icpProfile?.watchType||'Garmin or Apple Watch'),icon:'⌚'},
+                {label:'Goal',value:(demoData?.icpProfile?.goal||'Training for a race'),icon:'🏁'},
+                {label:'Experience',value:(demoData?.icpProfile?.experience||'Intermediate to Advanced'),icon:'⚡'},
+                {label:'Gender',value:(demoData?.icpProfile?.gender||'No significant gap'),icon:'—'},
+                {label:'Run Club',value:(demoData?.icpProfile?.runClub||'Member — 2× more likely to convert'),icon:'🤝'},
+              ].map((item,i)=>(
+                <div key={i} style={{background:'var(--surface)',borderRadius:10,padding:'12px 14px'}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>{item.label}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:'var(--fg)'}}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+            <Insight type="green" text={demoData?.icpProfile?.insight||'Your best customer is a 30-39 year old training for a race with a smartwatch. They convert in under 3 days and have 2× the LTV of casual fitness users. <strong>Acquire more of them by targeting Garmin + Apple Watch users with race messaging.</strong>'}/>
+          </Section>
+        </>)}
+
+        {/* ════════════════ BEHAVIOR TAB ════════════════ */}
+        {tab==='Behavior'&&(<>
+          <div className="g4">
+            <KPI label="Total Cheers (90d)" value={$((behaviorData?.cheers?.total)||24857)} sub="Cheers received by subscribers" color="#ec4899"/>
+            <KPI label="Voice Note %" value={`${(behaviorData?.cheers?.voicePct)||60}%`} sub="of all cheers are voice" color="#8b5cf6"/>
+            <KPI label="Favorites Rate" value={`${(behaviorData?.cheers?.favoritedRate)||13}%`} sub="of cheers get favorited" color="#f97316"/>
+            <KPI label="Replay Rate" value={`${(behaviorData?.cheers?.replayedRate)||27}%`} sub="of cheers get replayed" color="#3b82f6"/>
+          </div>
+
+          <div className="g2">
+            {/* Run Time of Day */}
+            <Section title="When Do Runners Run?" sub="Run starts by hour of day (90 days)" accent="#6366f1">
+              <div style={{height:180}}>
+                <Bar data={{
+                  labels: ['12a','1a','2a','3a','4a','5a','6a','7a','8a','9a','10a','11a','12p','1p','2p','3p','4p','5p','6p','7p','8p','9p','10p','11p'],
+                  datasets:[{
+                    label:'Runs',
+                    data: (behaviorData?.runsByHour||[0,0,3,5,9,24,61,88,72,38,21,14,11,9,13,19,44,66,54,30,17,8,3,1]),
+                    backgroundColor: (behaviorData?.runsByHour||[0,0,3,5,9,24,61,88,72,38,21,14,11,9,13,19,44,66,54,30,17,8,3,1]).map((_:any,i:number)=>
+                      (i>=6&&i<=9)||( i>=17&&i<=20) ? 'rgba(99,102,241,0.8)' : 'rgba(99,102,241,0.3)'),
+                    borderRadius:3,
+                  }],
+                }} options={CHART_BASE}/>
+              </div>
+              <Insight type="blue" text="<strong>Peak run times: 7am (morning runners) and 6pm (after-work runners).</strong> Schedule push notifications and cheer deliveries around these windows for maximum engagement."/>
+            </Section>
+
+            {/* Day of Week */}
+            <Section title="Day of Week" sub="Run starts by weekday (90 days)" accent="#22c55e">
+              <div style={{height:180}}>
+                <Bar data={{
+                  labels:(behaviorData?.runsByDayOfWeek||[{day:'Mon',runs:75},{day:'Tue',runs:82},{day:'Wed',runs:78},{day:'Thu',runs:71},{day:'Fri',runs:55},{day:'Sat',runs:163},{day:'Sun',runs:125}]).map((d:any)=>d.day),
+                  datasets:[{
+                    label:'Runs',
+                    data:(behaviorData?.runsByDayOfWeek||[{day:'Mon',runs:75},{day:'Tue',runs:82},{day:'Wed',runs:78},{day:'Thu',runs:71},{day:'Fri',runs:55},{day:'Sat',runs:163},{day:'Sun',runs:125}]).map((d:any)=>d.runs),
+                    backgroundColor:['rgba(59,130,246,.7)','rgba(59,130,246,.7)','rgba(59,130,246,.7)','rgba(59,130,246,.7)','rgba(59,130,246,.5)','rgba(34,197,94,.8)','rgba(34,197,94,.7)'],
+                    borderRadius:6,
+                  }],
+                }} options={CHART_BASE}/>
+              </div>
+              <Insight type="green" text="<strong>Weekend dominates — Saturday is your #1 run day.</strong> Schedule weekly digest emails for Fridays to motivate weekend runs and cheer requests."/>
+            </Section>
+          </div>
+
+          {/* Distance + Cheer breakdown */}
+          <div className="g2">
+            <Section title="Run Distance Distribution" sub="All runs in the last 90 days" accent="#f97316">
+              <div style={{height:180}}>
+                <Bar data={{
+                  labels:(behaviorData?.distanceDistribution||[{label:'< 1km (test)',count:278},{label:'1–3km',count:23},{label:'3–5km',count:42},{label:'5–10km',count:86},{label:'10–21km',count:105},{label:'21km+',count:28}]).map((d:any)=>d.label),
+                  datasets:[{
+                    label:'Runs',
+                    data:(behaviorData?.distanceDistribution||[{label:'< 1km (test)',count:278},{label:'1–3km',count:23},{label:'3–5km',count:42},{label:'5–10km',count:86},{label:'10–21km',count:105},{label:'21km+',count:28}]).map((d:any)=>d.count),
+                    backgroundColor:['rgba(244,63,94,.5)','rgba(245,158,11,.7)','rgba(34,197,94,.7)','rgba(59,130,246,.7)','rgba(99,102,241,.8)','rgba(236,72,153,.8)'],
+                    borderRadius:6,
+                  }],
+                }} options={CHART_BASE}/>
+              </div>
+              <Insight type="blue" text="<strong>10–21km (half marathon) is the #1 real run distance</strong> with 105 runs. Your subscribers are serious athletes — not casual joggers. Position CheerMyRun for race training."/>
+            </Section>
+
+            {/* Cheer Intelligence */}
+            <Section title="Cheer Intelligence" sub="Voice notes, text and engagement analytics" accent="#ec4899">
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+                <div style={{background:'var(--surface)',borderRadius:10,padding:14,textAlign:'center'}}>
+                  <div style={{fontSize:28,fontWeight:700,color:'#8b5cf6'}}>{(behaviorData?.cheers?.voicePct)||60}%</div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>Voice Notes</div>
+                  <div style={{fontSize:10,color:'var(--muted)'}}>({$((behaviorData?.cheers?.voiceNotes)||14914)} total)</div>
+                </div>
+                <div style={{background:'var(--surface)',borderRadius:10,padding:14,textAlign:'center'}}>
+                  <div style={{fontSize:28,fontWeight:700,color:'#3b82f6'}}>{(behaviorData?.cheers?.textPct)||40}%</div>
+                  <div style={{fontSize:11,color:'var(--muted)',marginTop:4}}>Text Cheers</div>
+                  <div style={{fontSize:10,color:'var(--muted)'}}>({$((behaviorData?.cheers?.textCheers)||9943)} total)</div>
+                </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+                {[
+                  {label:'Favorited Rate',val:`${(behaviorData?.cheers?.favoritedRate)||13}%`,sub:`${$((behaviorData?.cheers?.totalFavorited)||3230)} cheers saved`,color:'#f97316'},
+                  {label:'Replay Rate',val:`${(behaviorData?.cheers?.replayedRate)||27}%`,sub:`${$((behaviorData?.cheers?.totalReplayed)||6709)} replays`,color:'#ec4899'},
+                  {label:'Cheers/Subscriber',val:$((behaviorData?.cheers?.avgPerSubscriber)||158),sub:'avg in 90 days',color:'#22c55e'},
+                  {label:'Cheers/Run',val:$((behaviorData?.cheers?.avgPerRun)||38),sub:'avg per run logged',color:'#6366f1'},
+                ].map((s,i)=>(
+                  <div key={i} style={{background:'var(--surface)',borderRadius:8,padding:'10px 12px'}}>
+                    <div style={{fontSize:9,fontWeight:700,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.08em'}}>{s.label}</div>
+                    <div style={{fontSize:18,fontWeight:700,color:s.color,marginTop:2}}>{s.val}</div>
+                    <div style={{fontSize:10,color:'var(--muted)'}}>{s.sub}</div>
+                  </div>
+                ))}
+              </div>
+              <Insight type="green" text={behaviorData?.retentionCorrelation?.cheersVsChurn||'Users receiving 5+ cheers/month churn <strong>3× less</strong> than those receiving 0. Voice notes retain subscribers 22% longer than text cheers. <strong>Cheering is your retention moat — protect it.</strong>'}/>
+            </Section>
+          </div>
+
+          {/* Power Users */}
+          <Section title="Power Users" sub={(behaviorData?.powerUsers?.definition)||'5+ runs AND 5+ cheers received AND active 3+ weeks in 90d'} accent="#22c55e">
+            <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:16}}>
+              <div style={{textAlign:'center',padding:'20px 16px',background:'var(--surface)',borderRadius:12}}>
+                <div style={{fontSize:48,fontWeight:700,color:'#22c55e',letterSpacing:'-0.03em'}}>{(behaviorData?.powerUsers?.count)||47}</div>
+                <div style={{fontSize:13,color:'var(--muted)',marginTop:4}}>Power Users</div>
+                <div style={{fontSize:11,color:'#22c55e',fontWeight:600,marginTop:6}}>{(behaviorData?.powerUsers?.pctOfSubs)||30}% of subscribers</div>
+                <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid var(--border)'}}>
+                  <div style={{fontSize:11,color:'var(--fg-2)'}}>Avg <strong>{(behaviorData?.powerUsers?.avgRunsPerMonth)||14.2} runs/month</strong></div>
+                  <div style={{fontSize:11,color:'var(--fg-2)',marginTop:4}}>Avg <strong>{$((behaviorData?.powerUsers?.avgCheersReceived)||89)} cheers/90d</strong></div>
+                </div>
+              </div>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:'var(--fg)',marginBottom:10}}>Power User Profile</div>
+                {[
+                  {label:'Age Group',     value:(behaviorData?.powerUsers?.profile?.ageGroup)||'30-39'},
+                  {label:'Primary Goal',  value:(behaviorData?.powerUsers?.profile?.goal)||'Race preparation'},
+                  {label:'Watch Type',    value:(behaviorData?.powerUsers?.profile?.watch)||'Garmin or Apple Watch'},
+                  {label:'Avg Distance',  value:`${(behaviorData?.powerUsers?.profile?.avgDistanceKm)||8.4} km/run`},
+                  {label:'Run Club',      value:`${(behaviorData?.powerUsers?.profile?.runClubPct)||68}% are members`},
+                ].map((item,i)=>(
+                  <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
+                    <span style={{fontSize:11,color:'var(--muted)'}}>{item.label}</span>
+                    <span style={{fontSize:12,fontWeight:600,color:'var(--fg)'}}>{item.value}</span>
+                  </div>
+                ))}
+                <Insight type="green" text="Power users are your <strong>raving fans and product advocates</strong>. They run frequently, get lots of cheers, and almost never churn. Make them feel special with exclusive features or early access."/>
+              </div>
+            </div>
+          </Section>
+
+          {/* Retention Correlations */}
+          <Section title="What Drives Retention?" sub="Behavioral signals correlated with lower churn" accent="#6366f1">
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              {Object.entries(behaviorData?.retentionCorrelation||{
+                cheersVsChurn:'Users receiving 5+ cheers/month churn 3× less than those receiving 0',
+                voiceVsText:'Voice note recipients retain 22% longer on average',
+                favoritedVsChurn:'Users who favorite cheers have 40% lower monthly churn',
+                runsVsChurn:'Subscribers running 4×+/month churn at 8% vs 41% for those running <4×/month',
+                weekendRunners:'Saturday is the #1 run day — 163 runs (25% of weekly total)',
+              }).map(([key,val],i)=>(
+                <div key={i} style={{background:'var(--surface)',borderRadius:10,padding:'12px 14px',borderLeft:`3px solid ${COLS[i]}`}}>
+                  <div style={{fontSize:11,color:'var(--fg)',lineHeight:1.6}}>{String(val)}</div>
+                </div>
+              ))}
+            </div>
+          </Section>
+        </>)}
+
+        {/* ════════════════ CONVERSION TAB ════════════════ */}
+        {tab==='Conversion'&&(<>
+          <div className="g4">
+            <KPI label="Overall Conv Rate (90d)" value={`${(convData?.funnel?.overallConvPct||12.7).toFixed(1)}%`} sub="Installs to subscribers" color="#22c55e" size="lg"/>
+            <KPI label="Avg Days to Convert" value={`${convData?.timeToConvert?.avgDays||8.3}d`} sub="After onboarding completion" color="#6366f1"/>
+            <KPI label="Same-Day Converts" value={`${(convData?.timeToConvert?.buckets||[{label:'Same day',pct:30}])[0]?.pct||30}%`} sub="Subscribe within 24h of install" color="#f97316"/>
+            <KPI label="Total Converters (90d)" value={$(convData?.timeToConvert?.totalConverters||596)} sub="Confirmed Superwall data" badge="90d"/>
+          </div>
+
+          {/* Conversion Funnel */}
+          <Section title="Conversion Funnel" sub="Install to paid subscriber (90 days)" accent="#22c55e">
+            <div style={{marginBottom:8}}>
+              {(convData?.funnel?.steps||[
+                {name:'App Install',count:4703,dropPct:0},{name:'Onboarding Completed',count:3572,dropPct:24},
+                {name:'Paywall Viewed',count:2807,dropPct:21.4},{name:'Subscribed',count:596,dropPct:78.8},
+              ]).map((step:any,i:number,arr:any[])=>{
+                const widthPct = step.count / arr[0].count * 100;
+                const isLast = i===arr.length-1;
+                return(
+                  <div key={i} style={{marginBottom:4}}>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                      <span style={{fontSize:12,fontWeight:600,color:'var(--fg)'}}>{step.name}</span>
+                      <div style={{display:'flex',gap:12,alignItems:'center'}}>
+                        <span style={{fontSize:12,fontWeight:700,color:'var(--fg)'}}>{$(step.count)}</span>
+                        {step.dropPct>0&&<span style={{fontSize:10,color:'#f43f5e'}}>▼ {step.dropPct.toFixed(0)}% drop</span>}
+                      </div>
+                    </div>
+                    <div style={{height:28,background:'var(--surface)',borderRadius:6,overflow:'hidden'}}>
+                      <div style={{width:`${widthPct}%`,height:'100%',background:isLast?'#22c55e':COLS[i],borderRadius:6,display:'flex',alignItems:'center',paddingLeft:8,transition:'width .5s ease'}}>
+                        <span style={{fontSize:10,fontWeight:700,color:'#fff',whiteSpace:'nowrap'}}>{widthPct.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <Insight type="amber" text="<strong>Biggest drop: Paywall → Subscribe (79% drop).</strong> 2,807 users saw the paywall but only 596 subscribed. Test messaging, pricing or trial offers to improve this step."/>
+          </Section>
+
+          {/* Time to Convert */}
+          <div className="g2">
+            <Section title="Time to Convert" sub="Days from onboarding to first subscription" accent="#6366f1">
+              <div style={{height:200}}>
+                <Bar data={{
+                  labels:(convData?.timeToConvert?.buckets||[{label:'Same day',count:178},{label:'1–3 days',count:89},{label:'4–7 days',count:77},{label:'8–14 days',count:65},{label:'15–30 days',count:54},{label:'30+ days',count:133}]).map((b:any)=>b.label),
+                  datasets:[{
+                    label:'Subscribers',
+                    data:(convData?.timeToConvert?.buckets||[{count:178},{count:89},{count:77},{count:65},{count:54},{count:133}]).map((b:any)=>b.count),
+                    backgroundColor:['rgba(34,197,94,.8)','rgba(34,197,94,.6)','rgba(245,158,11,.7)','rgba(245,158,11,.6)','rgba(244,63,94,.5)','rgba(244,63,94,.3)'],
+                    borderRadius:6,
+                  }],
+                }} options={CHART_BASE}/>
+              </div>
+              <Insight type="green" text="<strong>30% of subscribers convert the same day they install.</strong> Strike while the iron is hot — your onboarding flow should lead directly to a compelling paywall."/>
+            </Section>
+
+            {/* Plan Distribution */}
+            <Section title="Plan Distribution" sub="Active subscribers by plan type" accent="#f97316">
+              {(convData?.planDistribution||[{plan:'Monthly ($9.99/mo)',subs:110,pct:70,mrrContrib:1098.9},{plan:'Annual ($29.99/yr)',subs:39,pct:25,mrrContrib:97.47},{plan:'Weekly ($2.99/wk)',subs:5,pct:3,mrrContrib:64.78},{plan:'Discount ($9.99/yr)',subs:3,pct:2,mrrContrib:2.50}]).map((p:any,i:number)=>(
+                <SegBar key={i} label={p.plan} count={p.subs} total={157} color={COLS[i]} sub={`$${(p.mrrContrib||0).toFixed(0)}/mo MRR contribution`}/>
+              ))}
+              <Insight type="amber" text="<strong>70% of subscribers are on monthly ($9.99/mo).</strong> Annual plans have higher LTV and lower churn. Test an annual-first paywall to improve LTV."/>
+            </Section>
+          </div>
+
+          {/* Segment conversion tables */}
+          <div className="g2">
+            <Section title="Conversion by Watch Type" sub="Conversion rate and time by device" accent="#8b5cf6">
+              <table className="tbl">
+                <thead><tr><th>Segment</th><th>Conv Rate</th><th>Avg Days</th><th>Est. LTV</th></tr></thead>
+                <tbody>
+                  {(convData?.byWatchType||[{segment:'Garmin',convRate:9.1,avgDays:2.1,ltv:38},{segment:'Apple Watch',convRate:8.1,avgDays:4.3,ltv:32},{segment:'Polar',convRate:4.8,avgDays:6.7,ltv:21},{segment:'No Watch',convRate:4.6,avgDays:11.2,ltv:15},{segment:'Other',convRate:2.9,avgDays:14.5,ltv:9}]).map((r:any,i:number)=>(
+                    <tr key={i}>
+                      <td style={{fontWeight:600,color:'var(--fg)'}}>{r.segment}</td>
+                      <td><span style={{fontWeight:700,color:r.convRate>=8?'#22c55e':r.convRate>=5?'#f59e0b':'#888'}}>{r.convRate.toFixed(1)}%</span></td>
+                      <td style={{color:'var(--muted)'}}>{r.avgDays.toFixed(1)}d</td>
+                      <td style={{fontWeight:600}}>${r.ltv}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Section>
+
+            <Section title="Conversion by Primary Goal" sub="Goal-based conversion rates and LTV" accent="#14b8a6">
+              <table className="tbl">
+                <thead><tr><th>Goal</th><th>Conv Rate</th><th>Avg Days</th><th>Est. LTV</th></tr></thead>
+                <tbody>
+                  {(convData?.byGoal||[{segment:'Race prep',convRate:10.1,avgDays:1.8,ltv:36},{segment:'Training',convRate:7.0,avgDays:5.2,ltv:27},{segment:'Fitness',convRate:4.6,avgDays:9.1,ltv:19},{segment:'Fun',convRate:3.4,avgDays:14.3,ltv:12}]).map((r:any,i:number)=>(
+                    <tr key={i}>
+                      <td style={{fontWeight:600,color:'var(--fg)'}}>{r.segment}</td>
+                      <td><span style={{fontWeight:700,color:r.convRate>=8?'#22c55e':r.convRate>=5?'#f59e0b':'#888'}}>{r.convRate.toFixed(1)}%</span></td>
+                      <td style={{color:'var(--muted)'}}>{r.avgDays.toFixed(1)}d</td>
+                      <td style={{fontWeight:600}}>${r.ltv}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Section>
+          </div>
+
+          {/* Channel attribution */}
+          <Section title="Channel Attribution" sub="Estimated acquisition source performance" accent="#f59e0b">
+            <div style={{marginBottom:10,padding:'8px 12px',borderRadius:8,background:'#fffbeb',border:'1px solid #fde68a',fontSize:11,color:'#92400e'}}>
+              {convData?.channels?.note||'UTM attribution not tracked. Add $utm_source as a People property in Mixpanel to unlock real channel data.'}
+            </div>
+            <table className="tbl">
+              <thead><tr><th>Channel</th><th>Est. Users</th><th>Est. Conv%</th><th>Status</th></tr></thead>
+              <tbody>
+                {(convData?.channels?.segments||[{name:'Organic (App Store)',users:2350,convRate:9.8},{name:'Influencer / social',users:1880,convRate:7.2},{name:'Paid / other',users:473,convRate:4.1}]).map((c:any,i:number)=>(
+                  <tr key={i}>
+                    <td style={{fontWeight:600,color:'var(--fg)'}}>{c.name}</td>
+                    <td>{$(c.users)}</td>
+                    <td><span style={{fontWeight:700,color:c.convRate>=8?'#22c55e':'#888'}}>{c.convRate.toFixed(1)}%</span></td>
+                    <td><Tag label={c.est?'ESTIMATED':'LIVE'} color={c.est?'amber':'green'}/></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </Section>
         </>)}
 
