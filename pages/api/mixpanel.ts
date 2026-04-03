@@ -3,14 +3,15 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 const PROJECT_ID = '3993852';
 const API_SECRET = process.env.MIXPANEL_SECRET || '';
 
-// ── Real event names confirmed from Mixpanel Lexicon (Apr 1 2026) ─────────────
-// subscription_started (1,809 queries/30d), cheer_received (1,543),
-// onboarding_completed (1,013), app_opened (698), run_completed (569),
-// run_started (520), run_saved (408), run_deleted (406),
-// cheer_replayed (312), cheer_favorited (243), onboarding_step_completed (240)
-// NOTE: There are TWO subscription events: "subscription_started" AND "Subscription Start"
+// ── Real event names confirmed from Mixpanel Lexicon ─────────────────────────
+// subscription_started (native Mixpanel), Subscription Start (Superwall→MP)
+// app_opened, run_started, run_completed, cheer_received, cheer_replayed,
+// cheer_favorited, onboarding_completed, onboarding_step_completed
+// NOTE: There are TWO subscription events:
+//   "subscription_started" — Mixpanel native (355 total 365d)
+//   "Subscription Start"   — Superwall integration (298 total, started Mar 2026)
 // The Mixpanel API returns 429 (rate limit) when called too frequently.
-// Cache-Control header (s-maxage=600) helps reduce API calls.
+// Cache-Control header (s-maxage=900) helps reduce API calls.
 
 async function mpEvents(event: string, from: string, to: string): Promise<any> {
   const url = new URL('https://mixpanel.com/api/query/events');
@@ -34,12 +35,12 @@ function extractSeries(data: any, event: string): Record<string, number> {
   return data?.data?.values?.[event] || {};
 }
 
-// ── Snapshot fallback (verified Apr 1 2026, last 30d snapshot) ───────────────
+// ── Snapshot fallback (verified Apr 2 2026, last 30d snapshot) ───────────────
 const SNAPSHOT_30D = {
   ok: false,
   fallback: true,
-  fetchedAt: '2026-04-01T12:00:00Z',
-  note: 'Mixpanel API rate-limited (429). Using snapshot from Apr 1 2026.',
+  fetchedAt: '2026-04-02T12:00:00Z',
+  note: 'Mixpanel API rate-limited (429). Using snapshot from Apr 2 2026.',
   dates30: ['03-02','03-03','03-04','03-05','03-06','03-07','03-08','03-09','03-10','03-11','03-12','03-13','03-14','03-15','03-16','03-17','03-18','03-19','03-20','03-21','03-22','03-23','03-24','03-25','03-26','03-27','03-28','03-29','03-30','03-31','04-01'],
   dau:     [61,52,51,43,58,70,54,46,47,20,34,51,75,105,66,63,54,62,72,115,99,61,50,41,44,60,90,90,49,42,35],
   subs30:  [0,4,4,3,8,5,3,3,1,2,2,55,59,15,8,5,5,6,4,19,10,2,4,3,10,14,16,15,7,4,3],
@@ -50,8 +51,8 @@ const SNAPSHOT_30D = {
   paywall: [86,78,82,65,76,94,65,76,90,33,52,74,100,157,126,94,102,113,106,155,68,54,50,41,57,62,69,54,45,38,30],
   totals: {
     dau30:     1950,
-    subs90:    596,   // Verified from Superwall 90d conversions
-    subs30:    321,   // Verified from Superwall 30d conversions
+    subs90:    653,   // Combined: subscription_started + Subscription Start (Superwall)
+    subs30:    321,
     cancels30: 143,
     renewals30: 26,
     runs30:    649,
@@ -74,9 +75,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Fetch sequentially with small gaps to avoid 429
     // Only fetch the most critical events — reduce API calls from 7 to 4
-    const [appOpen, subStart, runStart, cheerRcv] = await Promise.all([
+    const [appOpen, subStart, subStartSW, runStart, cheerRcv] = await Promise.all([
       mpEvents('app_opened',          d30, today),
       mpEvents('subscription_started', d90, today),
+      mpEvents('Subscription Start',   d90, today), // Superwall integration event
       mpEvents('run_started',          d30, today),
       mpEvents('cheer_received',       d30, today),
     ]);
@@ -89,6 +91,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const dauSeries  = extractSeries(appOpen,    'app_opened');
     const subSeries  = extractSeries(subStart,   'subscription_started');
+    const subSWSeries= extractSeries(subStartSW, 'Subscription Start');
     const runSeries  = extractSeries(runStart,   'run_started');
     const cherSeries = extractSeries(cheerRcv,   'cheer_received');
     const canSeries  = canResult ? extractSeries(canResult, 'Subscription Cancelled') : {};
@@ -98,8 +101,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const dates30 = Object.keys(dauSeries).sort().slice(-31);
     const pick = (series: Record<string, number>, keys: string[]) => keys.map(k => series[k] || 0);
 
-    const subs90total = Object.values(subSeries).reduce((a: number, b: any) => a + Number(b), 0);
-    const subs30total = dates30.reduce((s: number, d) => s + (subSeries[d] || 0), 0);
+    // Merge both subscription series (subscription_started + Subscription Start)
+    const mergedSubSeries: Record<string, number> = { ...subSeries };
+    for (const [d, v] of Object.entries(subSWSeries)) {
+      mergedSubSeries[d] = (mergedSubSeries[d] || 0) + Number(v);
+    }
+
+    const subs90total = Object.values(mergedSubSeries).reduce((a: number, b: any) => a + Number(b), 0);
+    const subs30total = dates30.reduce((s: number, d) => s + (mergedSubSeries[d] || 0), 0);
 
     return res.status(200).json({
       ok: true,
@@ -107,7 +116,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       fetchedAt: new Date().toISOString(),
       dates30,
       dau:      pick(dauSeries,     dates30),
-      subs30:   pick(subSeries,     dates30),
+      subs30:   pick(mergedSubSeries, dates30),
       cancels:  pick(canSeries,     dates30),
       renewals: pick(renSeries,     dates30),
       runs:     pick(runSeries,     dates30),
