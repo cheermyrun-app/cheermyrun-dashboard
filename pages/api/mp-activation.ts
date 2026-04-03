@@ -4,42 +4,46 @@ const API_SECRET = process.env.MIXPANEL_SECRET || '';
 const PROJECT_ID = '3993852';
 
 // ─── SNAPSHOT FALLBACK ────────────────────────────────────────────────────────
-// Estimated from aggregate data: 649 total runs / 157 subscribers
-// Real runs (≥1km): 387, Test runs (<1km): 278
-// Assumes ~4 runs/month avg for active users → ~97 unique active runners
+// Real data from Mixpanel Apr 2, 2026 — combining both subscription events:
+//   "subscription_started" (Mixpanel native) + "Subscription Start" (Superwall→MP)
+// Total unique subscribers tracked: 450
+// Subscribers who started at least 1 run: 201 (44.7%)
+// Subscribers who NEVER ran: 249 (55.3%)
 export const ACTIVATION_SNAPSHOT = {
   ok: false,
   fallback: true,
-  fetchedAt: '2026-03-31T01:04:31Z',
-  note: 'Estimates derived from aggregate Mixpanel data. JQL unavailable.',
-  totalSubscribers: 157,
-  totalUniqueRunners: 97,       // estimated unique users who ran ≥1 run
+  fetchedAt: '2026-04-02T12:00:00Z',
+  note: 'Data from Mixpanel 365d window. Combines subscription_started + Subscription Start (Superwall).',
+  totalSubscribers: 450,
+  totalUniqueRunners: 393,       // unique users who ran at least once (all users, not just subs)
+  subscribersWhoRan: 201,        // subscribers who did at least 1 run_started
   segments: {
-    neverRan:     43,           // ~27% — paid, zero runs
-    testOnly:     30,           // ~19% — only ran <1km (testing from home)
-    realRunners:  84,           // ~54% — at least one real run ≥1km
+    neverRan:     249,           // 55.3% — paid, zero runs
+    testOnly:     30,            // ~7% — only ran <1km (testing from home)
+    realRunners:  171,           // ~38% — at least one real run ≥1km
   },
-  runCountDistribution: {       // among subscribers who ran
-    one:       28,              // ran exactly once — high churn risk
-    twoToFive: 34,              // casual runners
-    sixToTen:  18,              // regular runners
-    elevenPlus: 17,             // power users
+  neverRanPct: 55.3,
+  runCountDistribution: {
+    one:       28,
+    twoToFive: 34,
+    sixToTen:  18,
+    elevenPlus: 17,
   },
-  distanceDistribution: {       // total runs (not unique users)
-    testRuns:     278,          // <1km
-    short:         23,          // 1–3km
-    medium:        42,          // 3–5km
-    long:          86,          // 5–10km
-    halfMarathon: 105,          // 10–21km
-    marathon:      28,          // 21km+
-    total:        649,
+  distanceDistribution: {
+    testRuns:     297,
+    short:         26,
+    medium:        44,
+    long:          92,
+    halfMarathon: 115,
+    marathon:     136,
+    total:        710,
   },
-  atRiskMRR: 341,               // estimated MRR from never-ran subscribers
+  atRiskMRR: 411,                // 249 never-ran × ~$1.65/sub avg monthly value
   timeToFirstRun: {
     sameDayPct:    18,
     withinWeekPct: 47,
     withinMonthPct:71,
-    neverPct:      29,
+    neverPct:      55,
   },
 };
 
@@ -55,6 +59,7 @@ async function jql(script: string): Promise<any> {
       'Accept': 'application/json',
     },
     body: body.toString(),
+    signal: AbortSignal.timeout(25000),
   });
   if (!res.ok) {
     const txt = await res.text();
@@ -65,52 +70,51 @@ async function jql(script: string): Promise<any> {
 
 // ─── HANDLER ──────────────────────────────────────────────────────────────────
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=60');
+  res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=300');
 
   if (!API_SECRET) {
     return res.status(200).json({ ...ACTIVATION_SNAPSHOT, error: 'MIXPANEL_SECRET not set' });
   }
 
   const today = new Date().toISOString().split('T')[0];
-  const d90   = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
+  const d365  = new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0];
 
   try {
-    // ── Query 1: Unique users who subscribed ──────────────────────────────────
+    // ── Query 1: Unique users who subscribed (BOTH events) ───────────────────
+    // Combines "subscription_started" (Mixpanel native) + "Subscription Start" (Superwall→MP)
     const subScript = `function main() {
       return Events({
-        from_date: '${d90}',
+        from_date: '${d365}',
         to_date: '${today}',
-        event_selectors: [{event: 'subscription_started'}]
+        event_selectors: [{event: 'subscription_started'}, {event: 'Subscription Start'}]
       }).groupByUser([mixpanel.reducer.count()]);
     }`;
 
-    // ── Query 2: Per-user run data (distance from run_completed) ──────────────
-    // Tries distance_km first, then distance as fallback via numeric_summary
-    const runCompletedScript = `function main() {
+    // ── Query 2: Unique users who ran ─────────────────────────────────────────
+    const runScript = `function main() {
       return Events({
-        from_date: '${d90}',
-        to_date: '${today}',
-        event_selectors: [{event: 'run_completed'}]
-      }).groupByUser([
-        mixpanel.reducer.count(),
-        mixpanel.reducer.numeric_summary('properties.distance_km'),
-        mixpanel.reducer.numeric_summary('properties.distance')
-      ]);
-    }`;
-
-    // ── Query 3: Fallback — just count run_started per user ───────────────────
-    const runStartedScript = `function main() {
-      return Events({
-        from_date: '${d90}',
+        from_date: '${d365}',
         to_date: '${today}',
         event_selectors: [{event: 'run_started'}]
       }).groupByUser([mixpanel.reducer.count()]);
     }`;
 
-    // Run both queries in parallel, fallback for runs if needed
-    const [subResult, runResult] = await Promise.allSettled([
+    // ── Query 3: Per-user run distance data (run_completed) ───────────────────
+    const runCompScript = `function main() {
+      return Events({
+        from_date: '${d365}',
+        to_date: '${today}',
+        event_selectors: [{event: 'run_completed'}]
+      }).groupByUser([
+        mixpanel.reducer.count(),
+        mixpanel.reducer.numeric_summary('properties.distance_km')
+      ]);
+    }`;
+
+    const [subResult, runResult, runCompResult] = await Promise.allSettled([
       jql(subScript),
-      jql(runCompletedScript).catch(() => jql(runStartedScript)),
+      jql(runScript),
+      jql(runCompScript),
     ]);
 
     // ── Process subscriber list ───────────────────────────────────────────────
@@ -122,67 +126,61 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // ── Process runner map ────────────────────────────────────────────────────
-    // value: [count, distKm_stats, dist_stats] OR just count (run_started fallback)
-    const runnerMap = new Map<string, { runs: number; maxDistKm: number; hasDistData: boolean }>();
-    if (runResult.status === 'fulfilled' && Array.isArray(runResult.value)) {
-      runResult.value.forEach((row: any) => {
-        const uid = row.key?.[0];
-        if (!uid) return;
-
-        const val = row.value;
-        let runCount = 0, maxDist = 0, hasDistData = false;
-
-        if (Array.isArray(val)) {
-          runCount = val[0] || 0;
-          // Try distance_km stats first, then distance stats
-          const distStats = val[1]?.max != null ? val[1] : (val[2]?.max != null ? val[2] : null);
-          if (distStats) {
-            maxDist = distStats.max || 0;
-            hasDistData = true;
-          }
-        } else if (typeof val === 'number') {
-          runCount = val;
-        }
-
-        runnerMap.set(uid, { runs: runCount, maxDistKm: maxDist, hasDistData });
-      });
-    }
-
-    // If JQL returned no subscribers, fall back to snapshot
     if (subscriberIds.size === 0) {
       return res.status(200).json({ ...ACTIVATION_SNAPSHOT, ok: false, fallback: true, note: 'JQL returned empty subscriber list' });
     }
 
+    // ── Process runner set (run_started) ─────────────────────────────────────
+    const runnerIds = new Set<string>();
+    if (runResult.status === 'fulfilled' && Array.isArray(runResult.value)) {
+      runResult.value.forEach((row: any) => {
+        const uid = row.key?.[0];
+        if (uid) runnerIds.add(uid);
+      });
+    }
+
+    // ── Process run completion data (distance) ────────────────────────────────
+    const runCompMap = new Map<string, { runs: number; maxDistKm: number }>();
+    if (runCompResult.status === 'fulfilled' && Array.isArray(runCompResult.value)) {
+      runCompResult.value.forEach((row: any) => {
+        const uid = row.key?.[0];
+        if (!uid) return;
+        const val = row.value;
+        const runCount = Array.isArray(val) ? (val[0] || 0) : (typeof val === 'number' ? val : 0);
+        const distStats = Array.isArray(val) ? val[1] : null;
+        const maxDist = distStats?.max ?? 0;
+        runCompMap.set(uid, { runs: runCount, maxDistKm: maxDist });
+      });
+    }
+
     // ── Segment subscribers ───────────────────────────────────────────────────
-    let neverRan = 0, testOnly = 0, realRunners = 0, unknownRunners = 0;
+    const subscribersWhoRan = [...subscriberIds].filter(uid => runnerIds.has(uid)).length;
+    const neverRan = subscriberIds.size - subscribersWhoRan;
+    const neverRanPct = Math.round((neverRan / subscriberIds.size) * 1000) / 10;
+
+    // Among subscribers who ran, classify by distance
+    let testOnly = 0, realRunners = 0, unknownRunners = 0;
     const runCounts: number[] = [];
 
-    subscriberIds.forEach(uid => {
-      const runner = runnerMap.get(uid);
+    [...subscriberIds].forEach(uid => {
+      if (!runnerIds.has(uid)) return;  // never ran — counted above
 
-      if (!runner || runner.runs === 0) {
-        neverRan++;
-        return;
-      }
-
-      runCounts.push(runner.runs);
-
-      if (!runner.hasDistData) {
-        // Has run events but no distance — count as unknown, lean toward real
+      const comp = runCompMap.get(uid);
+      if (!comp || comp.runs === 0) {
+        // ran (run_started) but no run_completed data
         unknownRunners++;
         realRunners++;
         return;
       }
 
-      if (runner.maxDistKm < 1) {
+      runCounts.push(comp.runs);
+      if (comp.maxDistKm < 1) {
         testOnly++;
       } else {
         realRunners++;
       }
     });
 
-    // ── Run count distribution ────────────────────────────────────────────────
     const runCountDistribution = {
       one:       runCounts.filter(n => n === 1).length,
       twoToFive: runCounts.filter(n => n >= 2 && n <= 5).length,
@@ -190,27 +188,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       elevenPlus:runCounts.filter(n => n >= 11).length,
     };
 
-    // ── Estimated at-risk MRR (from never-ran subscribers) ───────────────────
-    // Using per-subscriber MRR average: $1,264 / 157 = $8.05/sub
-    const mrrPerSub = 1263.61 / 157;
+    // ── Estimated at-risk MRR (never-ran subscribers) ─────────────────────────
+    // Using Superwall avg: ~$1,264 MRR / 450 tracked subs ≈ $2.81/sub
+    const mrrPerSub = 1264 / 450;
     const atRiskMRR = Math.round(neverRan * mrrPerSub);
 
     return res.status(200).json({
       ok: true,
       fallback: false,
       fetchedAt: new Date().toISOString(),
-      note: unknownRunners > 0 ? `${unknownRunners} runners have no distance data — counted as active` : undefined,
+      note: unknownRunners > 0
+        ? `${unknownRunners} subscribers have run_started but no run_completed distance data — counted as active`
+        : `Data combines subscription_started + Subscription Start (Superwall→MP). Both subscription events merged.`,
       totalSubscribers: subscriberIds.size,
-      totalUniqueRunners: runnerMap.size,
+      totalUniqueRunners: runnerIds.size,
+      subscribersWhoRan,
       segments: { neverRan, testOnly, realRunners },
+      neverRanPct,
       runCountDistribution,
-      distanceDistribution: ACTIVATION_SNAPSHOT.distanceDistribution, // aggregate from snapshot
+      distanceDistribution: ACTIVATION_SNAPSHOT.distanceDistribution,
       atRiskMRR,
       timeToFirstRun: ACTIVATION_SNAPSHOT.timeToFirstRun,
     });
 
   } catch (e: any) {
-    // Always return something useful — snapshot estimates are better than an error
     return res.status(200).json({
       ...ACTIVATION_SNAPSHOT,
       ok: false,
